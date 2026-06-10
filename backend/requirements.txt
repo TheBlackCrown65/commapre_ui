@@ -1,0 +1,48 @@
+# === Core Framework ===
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+aiofiles
+pydantic
+
+# === Database (PostgreSQL) ===
+sqlalchemy
+psycopg2-binary
+alembic
+
+# === Image Processing ===
+opencv-python-headless
+numpy
+pillow
+
+# === Authentication ===
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt==4.0.1
+
+# === Async Queue ===
+celery[redis]
+redis
+
+# === HTTP Client ===
+requests
+
+# === PDF Generation ===
+reportlab
+
+# === System Monitoring ===
+psutil
+
+# === Security Hardening ===
+safety
+slowapi
+
+# === Testing ===
+pytest
+pytest-mock
+pytest-asyncio
+httpx
+
+# === Enterprise Integration ===
+ldap3

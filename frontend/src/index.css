@@ -1,0 +1,278 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom Scrollbar for better UX */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* ========================================================= */
+/* 🟢 CUSTOM DRAG & DROP CURSORS (มือแบ / กำหมัด แบบสมบูรณ์ 100%) */
+/* ========================================================= */
+
+/* 1. รูปมือแบ (ตอนชี้เตรียมจะลาก) */
+.cursor-grab {
+    /* สังเกตตรง stroke-width='0.8' */
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'%3E%3Cg fill='white' stroke='black' stroke-width='0.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 10.5V4a2 2 0 0 1 4 0v6.5'/%3E%3Cpath d='M14 10.5V5a2 2 0 0 1 4 0v5.5'/%3E%3Cpath d='M18 10.5V7a2 2 0 0 1 4 0v9c0 3.3-2.7 6-6 6h-3c-2.8 0-5.3-1.8-6-4.5L2.5 14.5a2 2 0 0 1 3-2.5l.5 1.5V6a2 2 0 0 1 4 0v4.5'/%3E%3C/g%3E%3C/svg%3E") 11 11, grab !important;
+}
+
+/* 2. รูปกำหมัด (ขณะกำลังคลิกค้าง หรือตอนกำลังลาก) */
+.cursor-grabbing,
+.cursor-grab:active,
+.active\:cursor-grabbing:active,
+body[style*="cursor: grabbing"],
+body[style*="cursor: grabbing"] * {
+    /* สังเกตตรง stroke-width='0.8' */
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'%3E%3Cg fill='white' stroke='black' stroke-width='0.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 11.5V10a2 2 0 0 1 4 0v1.5'/%3E%3Cpath d='M14 11.5V11a2 2 0 0 1 4 0v.5'/%3E%3Cpath d='M18 11.5V12a2 2 0 0 1 4 0v8c0 3.3-2.7 6-6 6h-3c-2.8 0-5.3-1.8-6-4.5L2.5 14.5a2 2 0 0 1 3-2.5l.5 1.5V10a2 2 0 0 1 4 0v1.5'/%3E%3C/g%3E%3C/svg%3E") 11 11, grabbing !important;
+}
+
+/* ========================================================= */
+/* 🚀 PROGRESS BAR ANIMATIONS                                */
+/* ========================================================= */
+
+.bg-stripes {
+    background-image: linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.25) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.25) 50%,
+        rgba(255, 255, 255, 0.25) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+}
+
+.animate-stripes {
+    animation: progress-stripes 1s linear infinite;
+}
+
+@keyframes progress-stripes {
+    from {
+        background-position: 1rem 0;
+    }
+    to {
+        background-position: 0 0;
+    }
+}
+
+/* ========================================================= */
+/* SweetAlert2 Custom Backdrop Blur                          */
+/* ========================================================= */
+.swal2-blur-backdrop {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    background: rgba(15, 23, 42, 0.65) !important;
+}
+
+/* ========================================================= */
+/* SweetAlert2 Custom Timer Progress Bar                     */
+/* ========================================================= */
+.swal2-gray-progress {
+    background-color: #9ca3af !important;
+}
+
+/* ========================================================= */
+/* Hourglass Slow Spin Animation                             */
+/* ========================================================= */
+@keyframes hourglass-spin-pause {
+    0% { transform: rotate(0deg); }
+    33.33% { transform: rotate(180deg); }
+    100% { transform: rotate(180deg); }
+}
+
+.animate-spin-slow {
+    animation: hourglass-spin-pause 3s ease-in-out infinite;
+}
+
+/* ========================================================= */
+/* 🔳 Skeleton Animations                                    */
+/* ========================================================= */
+@keyframes skeleton-resize {
+    0%, 100% {
+        transform: scale(0.85);
+        opacity: 0.4;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+}
+
+.animate-skeleton-resize {
+    animation: skeleton-resize 3s ease-in-out infinite;
+    transform-origin: center;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.animate-shimmer {
+    background: linear-gradient(90deg, rgba(226, 232, 240, 0.4) 25%, rgba(241, 245, 249, 0.8) 50%, rgba(226, 232, 240, 0.4) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite linear;
+}
+
+/* ========================================================= */
+/* 🚀 Premium Scanner Loading Animation                      */
+/* ========================================================= */
+@keyframes scanline {
+    0% { top: -5%; opacity: 0; }
+    2% { opacity: 1; }
+    15% { top: 105%; opacity: 1; }
+    28% { top: -5%; opacity: 1; }
+    30% { top: -5%; opacity: 0; }
+    100% { top: -5%; opacity: 0; }
+}
+
+.animate-scanline {
+    animation: scanline 8s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+    0% {
+        transform: scale(0.8);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 20px rgba(99, 102, 241, 0);
+    }
+    100% {
+        transform: scale(0.8);
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+}
+
+.animate-pulse-ring {
+    animation: pulse-ring 2s infinite cubic-bezier(0.66, 0, 0, 1);
+}
+
+@keyframes data-flow {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 0% 200%; }
+}
+
+.animate-data-flow {
+    background-image: linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(99, 102, 241, 0.1) 50%, rgba(255,255,255,0) 100%);
+    background-size: 100% 200%;
+    animation: data-flow 3s linear infinite;
+}
+
+/* ========================================================= */
+/* 📈 Stock Graph Animation for ScannerLoader                */
+/* ========================================================= */
+@keyframes doc-to-dot {
+    0%, 30% {
+        width: 3.5rem;
+        height: 4.5rem;
+        border-radius: 0.5rem;
+        transform: translate(0px, 0px);
+        background: linear-gradient(to top right, #4f46e5, #3b82f6);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    35% {
+        width: 0.75rem;
+        height: 0.75rem;
+        border-radius: 50%;
+        transform: translate(0px, 0px);
+        background: linear-gradient(to top right, #4f46e5, #3b82f6);
+        box-shadow: 0 0 10px rgba(99,102,241,0.8);
+    }
+    40% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(-40px, 20px);
+        background: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.8);
+    }
+    50% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(-20px, 0px);
+        background: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.8);
+    }
+    60% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(-5px, 15px);
+        background: #6366f1; box-shadow: 0 0 10px rgba(99,102,241,0.8);
+    }
+    70% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(15px, -20px);
+        background: #8b5cf6; box-shadow: 0 0 10px rgba(139,92,246,0.8);
+    }
+    80% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(28px, 0px);
+        background: #8b5cf6; box-shadow: 0 0 10px rgba(139,92,246,0.8);
+    }
+    90% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(42px, -25px);
+        background: #10b981; box-shadow: 0 0 15px rgba(16,185,129,0.9);
+    }
+    95% {
+        width: 0.75rem; height: 0.75rem; border-radius: 50%;
+        transform: translate(0px, 0px);
+        background: linear-gradient(to top right, #4f46e5, #3b82f6);
+        box-shadow: 0 0 10px rgba(99,102,241,0.8);
+    }
+    100% {
+        width: 3.5rem;
+        height: 4.5rem;
+        border-radius: 0.5rem;
+        transform: translate(0px, 0px);
+        background: linear-gradient(to top right, #4f46e5, #3b82f6);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+}
+
+.animate-doc-to-dot {
+    animation: doc-to-dot 8s linear infinite;
+}
+
+@keyframes draw-line {
+    0%, 40% { stroke-dashoffset: 143.5; opacity: 1; }
+    50% { stroke-dashoffset: 111.5; opacity: 1; }
+    60% { stroke-dashoffset: 90.3; opacity: 1; }
+    70% { stroke-dashoffset: 54.2; opacity: 1; }
+    80% { stroke-dashoffset: 29.2; opacity: 1; }
+    90% { stroke-dashoffset: 0; opacity: 1; }
+    95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+.animate-draw-line {
+    stroke-dasharray: 143.5;
+    stroke-dashoffset: 143.5;
+    animation: draw-line 8s linear infinite;
+}
+
+@keyframes inner-icon-fade {
+    0%, 30% { opacity: 1; transform: scale(1); }
+    33%, 97% { opacity: 0; transform: scale(0); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-inner-icon-fade {
+    animation: inner-icon-fade 8s linear infinite;
+}
