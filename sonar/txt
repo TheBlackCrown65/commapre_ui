@@ -1,0 +1,6 @@
+
+squ_370ce30fae5e2348b80cac132a132afe25aa7060
+
+
+
+docker run --rm --network="sonar-network" -v "${PWD}:/usr/src" -e SONAR_HOST_URL="http://sonarqube:9000" -e SONAR_TOKEN="squ_370ce30fae5e2348b80cac132a132afe25aa7060" sonarsource/sonar-scanner-cli

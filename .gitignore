@@ -1,0 +1,38 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# Database (SQLite fallback & Dumps)
+data/
+*.db
+backup.sql
+pg_data/
+redis_data/
+
+# Output files (job results)
+output/
+
+# Deployment & Archives
+*.zip
+*.tar.gz
+
+# IDE & Agents
+.vscode/
+.idea/
+.agent/
+.gemini/
+
+# OS
+.DS_Store
+Thumbs.db

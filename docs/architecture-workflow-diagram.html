@@ -1,0 +1,2105 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Verify — Interactive Architecture & Workflow Diagram</title>
+  
+  <!-- Fonts per diagram-design spec: Instrument Serif, Geist, Geist Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+  <style>
+    /* -------------------------------------------------------------
+       CSS Design Tokens (Light / Dark) per diagram-design standards
+       No Drop Shadows! Strictly borders, radii 6-8px, 4px grid.
+       Theme: Robot Verify Blue #1E50FF, Slate Gray & Clean Paper
+    ------------------------------------------------------------- */
+    :root[data-theme="dark"] {
+      --paper: #0b0f19;
+      --paper-2: #111827;
+      --paper-card: #151d30;
+      --paper-card-hover: #1c263d;
+      --ink: #f1f5f9;
+      --muted: #94a3b8;
+      --soft: #64748b;
+      --rule: rgba(255, 255, 255, 0.10);
+      --rule-solid: #2d3748;
+      --accent: #1e50ff;
+      --accent-hover: #3b6cff;
+      --accent-tint: rgba(30, 80, 255, 0.12);
+      --accent-tint-strong: rgba(30, 80, 255, 0.22);
+      --link: #60a5fa;
+      --success: #10b981;
+      --success-tint: rgba(16, 185, 129, 0.12);
+      --warning: #f59e0b;
+      --warning-tint: rgba(245, 158, 11, 0.12);
+      --danger: #ef4444;
+      --danger-tint: rgba(239, 68, 68, 0.12);
+      --badge-bg: rgba(255, 255, 255, 0.05);
+      --scrollbar-thumb: #1e293b;
+    }
+
+    :root[data-theme="light"] {
+      --paper: #f8fafc;
+      --paper-2: #f1f5f9;
+      --paper-card: #ffffff;
+      --paper-card-hover: #f8fafc;
+      --ink: #0f172a;
+      --muted: #475569;
+      --soft: #64748b;
+      --rule: rgba(15, 23, 42, 0.10);
+      --rule-solid: #cbd5e1;
+      --accent: #1e50ff;
+      --accent-hover: #0f3ecc;
+      --accent-tint: rgba(30, 80, 255, 0.07);
+      --accent-tint-strong: rgba(30, 80, 255, 0.14);
+      --link: #2563eb;
+      --success: #059669;
+      --success-tint: rgba(5, 150, 105, 0.08);
+      --warning: #d97706;
+      --warning-tint: rgba(217, 119, 6, 0.08);
+      --danger: #dc2626;
+      --danger-tint: rgba(220, 38, 38, 0.08);
+      --badge-bg: rgba(15, 23, 42, 0.04);
+      --scrollbar-thumb: #cbd5e1;
+    }
+
+    /* Reset & Base */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--paper);
+      color: var(--ink);
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--paper);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 4px;
+    }
+
+    /* Top Application Bar */
+    .top-nav {
+      border-bottom: 1px solid var(--rule);
+      background-color: var(--paper-2);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: var(--accent-tint);
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+
+    .brand-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: var(--accent);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-family: 'Geist', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--rule-solid);
+      background: var(--paper-card);
+      color: var(--ink);
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      color: #ffffff;
+    }
+
+    /* Container */
+    .app-container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 32px 24px 64px 24px;
+      width: 100%;
+      flex: 1;
+    }
+
+    /* Editorial Header */
+    .header-block {
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .main-title {
+      font-family: 'Instrument Serif', Georgia, serif;
+      font-size: 38px;
+      font-weight: 400;
+      color: var(--ink);
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+
+    .sub-title {
+      font-size: 14px;
+      color: var(--muted);
+      max-width: 820px;
+    }
+
+    /* Navigation Quick Tabs */
+    .nav-tabs-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      padding: 6px 0 16px 0;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .tab-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--paper-2);
+      border: 1px solid var(--rule);
+      color: var(--muted);
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      border-color: var(--accent);
+      color: var(--ink);
+    }
+
+    .tab-btn.active {
+      background: var(--accent-tint);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .tab-btn .tab-num {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10px;
+      padding: 1px 5px;
+      background: var(--badge-bg);
+      border-radius: 3px;
+    }
+
+    /* Diagram Canvas Container */
+    .diagram-frame {
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      background: var(--paper-2);
+      padding: 24px;
+      position: relative;
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+
+    .diagram-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .active-view-tag {
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: var(--accent-tint);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+
+    .hint-text {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .svg-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      display: flex;
+      justify-content: center;
+      padding: 16px 8px;
+    }
+
+    svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      user-select: none;
+    }
+
+    /* SVG Interactive Node States */
+    .clickable-node {
+      cursor: pointer;
+      transition: filter 0.15s ease, transform 0.15s ease;
+    }
+
+    .clickable-node:hover rect.node-box {
+      stroke: var(--accent) !important;
+      stroke-width: 2px !important;
+      filter: brightness(1.08);
+    }
+
+    .clickable-node:hover .node-title {
+      fill: var(--accent) !important;
+    }
+
+    /* Summary & Analysis Cards (3 varied columns per diagram-design) */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr 0.95fr;
+      gap: 20px;
+      margin-top: 28px;
+    }
+
+    @media (max-width: 1024px) {
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--paper-card);
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      padding: 20px;
+      transition: border-color 0.15s ease;
+    }
+
+    .card:hover {
+      border-color: var(--rule-solid);
+    }
+
+    .card .eyebrow {
+      margin-bottom: 6px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .card-dot.blue { background-color: var(--accent); }
+    .card-dot.slate { background-color: var(--muted); }
+    .card-dot.green { background-color: var(--success); }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .card-list li strong {
+      color: var(--ink);
+    }
+
+    .badge {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--rule-solid);
+      background: var(--badge-bg);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* Modal / Inspector Drawer for Deep Details */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(2px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .drawer-overlay.active {
+      display: flex;
+    }
+
+    .drawer-content {
+      width: 100%;
+      max-width: 520px;
+      height: 100%;
+      background: var(--paper-2);
+      border-left: 1px solid var(--rule-solid);
+      padding: 32px 28px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+    .drawer-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 16px;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      color: var(--muted);
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .close-btn:hover {
+      color: var(--ink);
+      border-color: var(--ink);
+    }
+
+    .spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+
+    .spec-table th {
+      text-align: left;
+      font-family: 'Geist Mono', monospace;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .spec-table td {
+      padding: 8px;
+      border-bottom: 1px solid var(--rule);
+      color: var(--ink);
+    }
+
+    .spec-table code {
+      font-family: 'Geist Mono', monospace;
+      color: var(--accent);
+      background: var(--accent-tint);
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    /* Footer Colophon per diagram-design */
+    .footer-colophon {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid var(--rule);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      color: var(--soft);
+    }
+
+    .footer-colophon a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .footer-colophon a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="brand-section">
+      <div class="brand-badge">
+        <span class="dot"></span>
+        ROBOT VERIFY · ARCHITECTURE
+      </div>
+      <span style="font-size: 13px; color: var(--muted); font-weight: 500;">
+        Enterprise Visual Regression Testing Platform
+      </span>
+    </div>
+
+    <div class="nav-actions">
+      <button class="btn" id="btn-back-overview" onclick="switchView('overview')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+        Overview Map [Esc]
+      </button>
+
+      <button class="btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+        <svg id="theme-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <span id="theme-text">Theme</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="app-container">
+
+    <!-- Editorial Header Block -->
+    <div class="header-block">
+      <div class="eyebrow">Interactive Blueprint · 10 Sidebar Workflows</div>
+      <h1 class="main-title" id="page-title">Robot Verify System Topology</h1>
+      <p class="sub-title" id="page-subtitle">
+        Click any menu node below to drill down into its comprehensive sub-flow and technical execution architecture.
+      </p>
+    </div>
+
+    <!-- Quick Navigation Tab Bar (All 10 Sidebar Menus) -->
+    <nav class="nav-tabs-bar" aria-label="Menu Navigation">
+      <button class="tab-btn active" id="tab-overview" onclick="switchView('overview')">
+        <span class="tab-num">★</span> Overview Diagram
+      </button>
+      <button class="tab-btn" id="tab-dashboard" onclick="switchView('dashboard')">
+        <span class="tab-num">01</span> Dashboard
+      </button>
+      <button class="tab-btn" id="tab-run" onclick="switchView('run')">
+        <span class="tab-num">02</span> Run Test
+      </button>
+      <button class="tab-btn" id="tab-setting" onclick="switchView('setting')">
+        <span class="tab-num">03</span> Settings
+      </button>
+      <button class="tab-btn" id="tab-org" onclick="switchView('org')">
+        <span class="tab-num">04</span> Organization
+      </button>
+      <button class="tab-btn" id="tab-manage-users" onclick="switchView('manage-users')">
+        <span class="tab-num">05</span> Manage Users
+      </button>
+      <button class="tab-btn" id="tab-manage-roles" onclick="switchView('manage-roles')">
+        <span class="tab-num">06</span> Manage Roles
+      </button>
+      <button class="tab-btn" id="tab-api-keys" onclick="switchView('api-keys')">
+        <span class="tab-num">07</span> API Keys
+      </button>
+      <button class="tab-btn" id="tab-config" onclick="switchView('config')">
+        <span class="tab-num">08</span> System Config
+      </button>
+      <button class="tab-btn" id="tab-monitor" onclick="switchView('monitor')">
+        <span class="tab-num">09</span> System Monitor
+      </button>
+      <button class="tab-btn" id="tab-activity-log" onclick="switchView('activity-log')">
+        <span class="tab-num">10</span> Activity Log
+      </button>
+    </nav>
+
+    <!-- Diagram Display Frame -->
+    <section class="diagram-frame">
+      <div class="diagram-toolbar">
+        <div class="toolbar-left">
+          <span class="active-view-tag" id="current-view-badge">VIEW: OVERVIEW TOPOLOGY</span>
+          <span class="hint-text" id="view-instruction-hint">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            Click any node or menu to reveal deep operational sub-flows
+          </span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="resetZoom()">Reset Canvas</button>
+        </div>
+      </div>
+
+      <!-- Main SVG Rendering Slot -->
+      <div class="svg-wrapper" id="svg-container">
+        <!-- SVG injected dynamically by switchView() -->
+      </div>
+    </section>
+
+    <!-- Summary Cards Grid (Varied column widths per diagram-design) -->
+    <section class="summary-grid" id="summary-section">
+      <!-- Injected by updateSummaryCards() -->
+    </section>
+
+    <!-- Colophon / Footer -->
+    <footer class="footer-colophon">
+      <div>
+        ROBOT VERIFY SPECIFICATION · FASTAPI + CELERY + REDIS + POSTGRESQL + REACT
+      </div>
+      <div>
+        Design Token Standard: diagram-design v2.6 · No Drop-Shadows · 4px Grid
+      </div>
+    </footer>
+
+  </main>
+
+  <!-- Side Detail Drawer -->
+  <div class="drawer-overlay" id="detail-drawer" onclick="handleDrawerClick(event)">
+    <div class="drawer-content" onclick="event.stopPropagation()">
+      <div class="drawer-header">
+        <div>
+          <div class="eyebrow" id="drawer-eyebrow">NODE SPECIFICATION</div>
+          <h2 style="font-size: 18px; font-weight: 600; color: var(--ink);" id="drawer-title">Node Title</h2>
+        </div>
+        <button class="close-btn" onclick="closeDrawer()" title="Close [Esc]">✕</button>
+      </div>
+
+      <div style="font-size: 13px; color: var(--muted); line-height: 1.6;" id="drawer-description">
+        Detailed description of the selected component or sub-process will appear here.
+      </div>
+
+      <div>
+        <div class="eyebrow">TECHNICAL ATTRIBUTES</div>
+        <table class="spec-table">
+          <tbody id="drawer-specs-body">
+            <!-- Dynamic specs -->
+          </tbody>
+        </table>
+      </div>
+
+      <div style="background: var(--paper-card); border: 1px solid var(--rule); border-radius: 6px; padding: 14px;">
+        <div class="eyebrow" style="margin-bottom: 4px;">OPERATIONAL FLOW & AUDIT</div>
+        <div style="font-size: 12px; color: var(--soft);" id="drawer-audit-info">
+          Audit event details and real-time state propagation notes.
+        </div>
+      </div>
+
+      <div style="margin-top: auto;">
+        <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="closeDrawer()">
+          Return to Diagram
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Controller -->
+  <script>
+    // -----------------------------------------------------------------
+    // Theme Management
+    // -----------------------------------------------------------------
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const target = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', target);
+      document.getElementById('theme-text').textContent = target === 'dark' ? 'Dark' : 'Light';
+      renderCurrentView();
+    }
+
+    function getThemeTokens() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      return {
+        isDark,
+        paper: isDark ? '#0b0f19' : '#f8fafc',
+        paper2: isDark ? '#111827' : '#ffffff',
+        paperCard: isDark ? '#151d30' : '#ffffff',
+        ink: isDark ? '#f1f5f9' : '#0f172a',
+        muted: isDark ? '#94a3b8' : '#475569',
+        soft: isDark ? '#64748b' : '#64748b',
+        rule: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(15, 23, 42, 0.12)',
+        ruleSolid: isDark ? '#2d3748' : '#cbd5e1',
+        accent: '#1e50ff',
+        accentTint: isDark ? 'rgba(30, 80, 255, 0.14)' : 'rgba(30, 80, 255, 0.08)',
+        accentTintStrong: isDark ? 'rgba(30, 80, 255, 0.24)' : 'rgba(30, 80, 255, 0.16)',
+        success: isDark ? '#10b981' : '#059669',
+        successTint: isDark ? 'rgba(16, 185, 129, 0.14)' : 'rgba(5, 150, 105, 0.08)',
+        danger: isDark ? '#ef4444' : '#dc2626',
+        dangerTint: isDark ? 'rgba(239, 68, 68, 0.14)' : 'rgba(220, 38, 38, 0.08)',
+        warning: isDark ? '#f59e0b' : '#d97706',
+        warningTint: isDark ? 'rgba(245, 158, 11, 0.14)' : 'rgba(217, 119, 6, 0.08)',
+      };
+    }
+
+    let currentView = 'overview';
+
+    function buildSvgDefs(t) {
+      return `
+        <defs>
+          <marker id="arrow-default" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="${t.muted}" />
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="${t.accent}" />
+          </marker>
+          <marker id="arrow-success" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="${t.success}" />
+          </marker>
+          <marker id="arrow-danger" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="${t.danger}" />
+          </marker>
+        </defs>
+      `;
+    }
+
+    // -----------------------------------------------------------------
+    // VIEW 1: OVERVIEW SYSTEM ARCHITECTURE SVG
+    // -----------------------------------------------------------------
+    function renderOverviewSvg(t) {
+      return `
+      <svg role="img" aria-labelledby="rv-overview-title rv-overview-desc" viewBox="0 0 1240 780" width="1240" height="780">
+        <title id="rv-overview-title">Robot Verify System Architecture & Sidebar Workflows</title>
+        <desc id="rv-overview-desc">Comprehensive system topology mapping clients, gateway, 10 core sidebar menus, and async processing storage.</desc>
+        
+        ${buildSvgDefs(t)}
+
+        <rect width="100%" height="100%" fill="${t.paper}" />
+
+        <!-- ZONE CONTAINERS -->
+        <rect x="24" y="24" width="220" height="660" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="40" y="52" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">ZONE 1: INGRESS & ACTORS</text>
+
+        <rect x="268" y="24" width="200" height="660" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="284" y="52" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">ZONE 2: GATEWAY & AUTH</text>
+
+        <rect x="492" y="24" width="460" height="660" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="508" y="52" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">ZONE 3: 10 SIDEBAR WORKFLOWS (CLICKABLE)</text>
+
+        <rect x="976" y="24" width="240" height="660" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="992" y="52" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">ZONE 4: STORAGE & WORKERS</text>
+
+        <!-- CONNECTORS -->
+        <path d="M 216 112 L 244 112 Q 252 112 252 120 L 252 160 Q 252 168 260 168 L 292 168" 
+              fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 216 264 L 252 264 Q 260 264 260 240 L 260 180 Q 260 168 268 168 L 292 168" 
+              fill="none" stroke="${t.accent}" stroke-width="1.2" marker-end="url(#arrow-accent)" />
+        <path d="M 216 416 L 252 416 Q 260 416 260 380 L 260 200 Q 260 168 268 168 L 292 168" 
+              fill="none" stroke="${t.muted}" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-default)" />
+
+        <path d="M 368 220 L 368 280" fill="none" stroke="${t.accent}" stroke-width="1.2" marker-end="url(#arrow-accent)" />
+        <rect x="336" y="240" width="64" height="14" rx="2" fill="${t.paper2}" />
+        <text x="368" y="250" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="8" text-anchor="middle">PROXY</text>
+
+        <path d="M 368 360 L 368 412" fill="none" stroke="${t.muted}" stroke-width="1" marker-end="url(#arrow-default)" />
+
+        <path d="M 444 320 L 468 320 Q 476 320 476 112 Q 476 112 484 112 L 516 112" 
+              fill="none" stroke="${t.accent}" stroke-width="1.6" marker-end="url(#arrow-accent)" />
+        <rect x="448" y="96" width="56" height="14" rx="2" fill="${t.paper2}" />
+        <text x="476" y="106" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="8" text-anchor="middle">REST/JSON</text>
+
+        <path d="M 444 320 L 468 320 Q 476 320 476 188 Q 476 188 484 188 L 516 188" 
+              fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+
+        <path d="M 444 320 L 516 320" fill="none" stroke="${t.muted}" stroke-width="1" marker-end="url(#arrow-default)" />
+
+        <path d="M 724 188 L 840 188 Q 848 188 848 140 Q 848 120 856 120 L 996 120" 
+              fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+        <rect x="856" y="104" width="76" height="14" rx="2" fill="${t.paper2}" />
+        <text x="894" y="114" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="8" text-anchor="middle">ASYNC DISPATCH</text>
+
+        <path d="M 1096 156 L 1096 208" fill="none" stroke="${t.accent}" stroke-width="1.2" marker-end="url(#arrow-accent)" />
+        <path d="M 1096 288 L 1096 348" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 1096 428 L 1096 488" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+
+        <path d="M 292 452 L 244 452 Q 236 452 236 320 Q 236 264 224 264" 
+              fill="none" stroke="${t.success}" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrow-success)" />
+        <rect x="216" y="340" width="48" height="14" rx="2" fill="${t.paper2}" />
+        <text x="240" y="350" fill="${t.success}" font-family="'Geist Mono', monospace" font-size="8" text-anchor="middle">SSE EVENT</text>
+
+        <!-- ZONE 1 NODES -->
+        <g class="clickable-node" onclick="showNodeDetail('actor-web')">
+          <rect x="44" y="80" width="172" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="52" y="88" width="44" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="74" y="97" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+          <text x="130" y="114" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">QA & Test Engineers</text>
+          <text x="130" y="130" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">React SPA · Browser</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('actor-ci')">
+          <rect x="44" y="232" width="172" height="64" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1" class="node-box"/>
+          <rect x="52" y="240" width="48" height="12" rx="2" fill="transparent" stroke="${t.accent}" stroke-width="0.8"/>
+          <text x="76" y="249" fill="${t.accent}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CI/CD</text>
+          <text x="130" y="266" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Jenkins / Robot FW</text>
+          <text x="130" y="282" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">API Key Automation</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('actor-admin')">
+          <rect x="44" y="384" width="172" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="52" y="392" width="44" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="74" y="401" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ADMIN</text>
+          <text x="130" y="418" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Admin & Compliance</text>
+          <text x="130" y="434" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">RBAC · Audit Trail</text>
+        </g>
+
+        <!-- ZONE 2 NODES -->
+        <g class="clickable-node" onclick="showNodeDetail('gw-nginx')">
+          <rect x="292" y="140" width="152" height="80" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="300" y="148" width="40" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="320" y="157" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PROXY</text>
+          <text x="368" y="178" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Nginx Web Server</text>
+          <text x="368" y="196" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:80 / :443 · Static + Reverse</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('gw-fastapi')">
+          <rect x="292" y="280" width="152" height="80" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box"/>
+          <rect x="300" y="288" width="44" height="12" rx="2" fill="transparent" stroke="${t.accent}" stroke-width="0.8"/>
+          <text x="322" y="297" fill="${t.accent}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API-GW</text>
+          <text x="368" y="318" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">FastAPI Service</text>
+          <text x="368" y="336" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:8000 · JWT + Key Auth</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('gw-sse')">
+          <rect x="292" y="412" width="152" height="68" rx="6" fill="${t.paperCard}" stroke="${t.success}" stroke-width="1" class="node-box"/>
+          <rect x="300" y="420" width="40" height="12" rx="2" fill="transparent" stroke="${t.success}" stroke-width="0.8"/>
+          <text x="320" y="429" fill="${t.success}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STREAM</text>
+          <text x="368" y="446" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">SSE Broadcaster</text>
+          <text x="368" y="462" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">/jobs/stream · Real-time</text>
+        </g>
+
+        <!-- ZONE 3 NODES: 10 SIDEBAR MENUS -->
+        <text x="516" y="74" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="8" font-weight="600" letter-spacing="0.1em">CLUSTER A: VERIFICATION & TESTING</text>
+
+        <!-- [01] Dashboard -->
+        <g class="clickable-node" onclick="switchView('dashboard')">
+          <rect x="516" y="84" width="208" height="56" rx="6" fill="${t.accentTintStrong}" stroke="${t.accent}" stroke-width="1.5" class="node-box"/>
+          <rect x="524" y="92" width="28" height="12" rx="2" fill="transparent" stroke="${t.accent}" stroke-width="0.8"/>
+          <text x="538" y="101" fill="${t.accent}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">01</text>
+          <text x="632" y="106" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Dashboard (Primary Hub)</text>
+          <text x="632" y="122" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Diff Inspector · Master Heal · PDF</text>
+        </g>
+
+        <!-- [02] Run Test -->
+        <g class="clickable-node" onclick="switchView('run')">
+          <rect x="516" y="156" width="208" height="52" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="164" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="173" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">02</text>
+          <text x="632" y="178" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Run Test</text>
+          <text x="632" y="194" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Upload & Trigger · Order/Name Match</text>
+        </g>
+
+        <!-- [03] Settings -->
+        <g class="clickable-node" onclick="switchView('setting')">
+          <rect x="516" y="224" width="208" height="52" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="232" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="241" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">03</text>
+          <text x="632" y="246" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Settings</text>
+          <text x="632" y="262" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Flow Tree · Masking Canvas</text>
+        </g>
+
+        <!-- CLUSTER B -->
+        <text x="516" y="298" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="8" font-weight="600" letter-spacing="0.1em">CLUSTER B: MULTI-TENANCY & IDENTITY</text>
+
+        <!-- [04] Organization -->
+        <g class="clickable-node" onclick="switchView('org')">
+          <rect x="516" y="308" width="208" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="316" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="325" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">04</text>
+          <text x="632" y="330" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Organization</text>
+          <text x="632" y="344" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Department & Squad Isolation</text>
+        </g>
+
+        <!-- [05] Manage Users -->
+        <g class="clickable-node" onclick="switchView('manage-users')">
+          <rect x="516" y="364" width="208" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="372" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="381" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">05</text>
+          <text x="632" y="386" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Manage Users</text>
+          <text x="632" y="400" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Approvals · Lifecycle · Force Logout</text>
+        </g>
+
+        <!-- [06] Manage Roles -->
+        <g class="clickable-node" onclick="switchView('manage-roles')">
+          <rect x="732" y="308" width="204" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="740" y="316" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="754" y="325" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">06</text>
+          <text x="844" y="330" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Manage Roles</text>
+          <text x="844" y="344" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">RBAC · Menu Permission Matrix</text>
+        </g>
+
+        <!-- [07] API Keys -->
+        <g class="clickable-node" onclick="switchView('api-keys')">
+          <rect x="732" y="364" width="204" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="740" y="372" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="754" y="381" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">07</text>
+          <text x="844" y="386" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">API Keys</text>
+          <text x="844" y="400" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">CI Tokens · Secret Hashing</text>
+        </g>
+
+        <!-- CLUSTER C -->
+        <text x="516" y="434" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="8" font-weight="600" letter-spacing="0.1em">CLUSTER C: OPERATIONS & COMPLIANCE</text>
+
+        <!-- [08] System Config -->
+        <g class="clickable-node" onclick="switchView('config')">
+          <rect x="516" y="444" width="208" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="452" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="461" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">08</text>
+          <text x="632" y="466" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">System Config</text>
+          <text x="632" y="480" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Diff Sensitivity · Retention · Limits</text>
+        </g>
+
+        <!-- [09] System Monitor -->
+        <g class="clickable-node" onclick="switchView('monitor')">
+          <rect x="732" y="444" width="204" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="740" y="452" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="754" y="461" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">09</text>
+          <text x="844" y="466" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">System Monitor</text>
+          <text x="844" y="480" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">CPU / RAM / Disk / Queue Health</text>
+        </g>
+
+        <!-- [10] Activity Log -->
+        <g class="clickable-node" onclick="switchView('activity-log')">
+          <rect x="516" y="500" width="420" height="48" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="524" y="508" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="538" y="517" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">10</text>
+          <text x="738" y="522" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Activity Log (Audit Trail)</text>
+          <text x="738" y="536" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">90-Day Banking Compliance · Security Events & Healing Logs</text>
+        </g>
+
+        <!-- Navigation Callout -->
+        <rect x="516" y="564" width="420" height="100" rx="6" fill="${t.paper}" stroke="${t.rule}" stroke-width="1" />
+        <text x="532" y="588" fill="${t.ink}" font-size="11" font-weight="600" font-family="'Geist', sans-serif">💡 Interactive Workflow Navigation</text>
+        <text x="532" y="608" fill="${t.muted}" font-size="10" font-family="'Geist', sans-serif">Click any menu box above (e.g. Dashboard, Run Test, Settings) to open the</text>
+        <text x="532" y="624" fill="${t.muted}" font-size="10" font-family="'Geist', sans-serif">exact end-to-end execution workflow with detailed step specifications,</text>
+        <text x="532" y="640" fill="${t.accent}" font-size="10" font-family="'Geist Mono', monospace">FastAPI endpoints, database tables, and image diff algorithms.</text>
+
+        <!-- ZONE 4 NODES -->
+        <g class="clickable-node" onclick="showNodeDetail('store-redis')">
+          <rect x="996" y="88" width="200" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="1004" y="96" width="36" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="1022" y="105" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">QUEUE</text>
+          <text x="1096" y="122" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Redis 7 Broker</text>
+          <text x="1096" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:6379 · Celery Task Buffer</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('worker-celery')">
+          <rect x="996" y="208" width="200" height="80" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box"/>
+          <rect x="1004" y="216" width="44" height="12" rx="2" fill="transparent" stroke="${t.accent}" stroke-width="0.8"/>
+          <text x="1026" y="225" fill="${t.accent}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">WORKER</text>
+          <text x="1096" y="246" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Celery Worker Cluster</text>
+          <text x="1096" y="264" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Image Diff Engine · OpenCV</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('store-fs')">
+          <rect x="996" y="348" width="200" height="80" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="1004" y="356" width="44" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="1026" y="365" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">STORAGE</text>
+          <text x="1096" y="386" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">File Storage Volume</text>
+          <text x="1096" y="404" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">/app/output (Master/Diff/Runs)</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('store-db')">
+          <rect x="996" y="488" width="200" height="80" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <rect x="1004" y="496" width="48" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8"/>
+          <text x="1028" y="505" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">DATABASE</text>
+          <text x="1096" y="526" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">PostgreSQL 15</text>
+          <text x="1096" y="544" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">:5432 · Relational Metadata & RBAC</text>
+        </g>
+
+        <!-- LEGEND -->
+        <line x1="40" y1="712" x2="1200" y2="712" stroke="${t.ruleSolid}" stroke-width="0.8" />
+        <text x="40" y="738" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" letter-spacing="0.14em">LEGEND</text>
+
+        <rect x="110" y="728" width="16" height="12" rx="2" fill="${t.accentTintStrong}" stroke="${t.accent}" stroke-width="1" />
+        <text x="134" y="738" fill="${t.ink}" font-size="10" font-family="'Geist', sans-serif">Focal Domain / Active</text>
+
+        <rect x="290" y="728" width="16" height="12" rx="2" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" />
+        <text x="314" y="738" fill="${t.ink}" font-size="10" font-family="'Geist', sans-serif">Standard Service / Store</text>
+
+        <line x1="490" y1="734" x2="520" y2="734" stroke="${t.accent}" stroke-width="1.5" marker-end="url(#arrow-accent)" />
+        <text x="530" y="738" fill="${t.ink}" font-size="10" font-family="'Geist', sans-serif">Primary Data / Control Path</text>
+
+        <line x1="720" y1="734" x2="750" y2="734" stroke="${t.success}" stroke-width="1.2" stroke-dasharray="4,4" marker-end="url(#arrow-success)" />
+        <text x="760" y="738" fill="${t.ink}" font-size="10" font-family="'Geist', sans-serif">Real-time SSE Push</text>
+
+        <rect x="930" y="728" width="28" height="12" rx="2" fill="transparent" stroke="${t.soft}" stroke-width="0.8" />
+        <text x="944" y="737" fill="${t.soft}" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle">API</text>
+        <text x="968" y="738" fill="${t.ink}" font-size="10" font-family="'Geist', sans-serif">Component Type Tag</text>
+      </svg>
+      `;
+    }
+
+    // -----------------------------------------------------------------
+    // VIEW 2: DETAILED SUB-FLOW FOR MENU 01 — DASHBOARD
+    // -----------------------------------------------------------------
+    function renderDashboardSvg(t) {
+      return `
+      <svg role="img" aria-labelledby="rv-dash-title rv-dash-desc" viewBox="0 0 1240 820" width="1240" height="820">
+        <title id="rv-dash-title">Menu 01: Dashboard Detailed Execution & Inspection Flow</title>
+        <desc id="rv-dash-desc">Four distinct interconnected execution paths: Job History Selection, UI Visual Diff Engine, Master Image Healing, and Client-Side PDF Report Generation.</desc>
+
+        ${buildSvgDefs(t)}
+
+        <rect width="100%" height="100%" fill="${t.paper}" />
+
+        <!-- 4 Sub-flow Containers -->
+        <rect x="24" y="24" width="1192" height="160" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <rect x="36" y="34" width="140" height="20" rx="4" fill="${t.accentTint}" />
+        <text x="106" y="48" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="9" font-weight="600" text-anchor="middle">FLOW 1: JOB HISTORY</text>
+
+        <rect x="24" y="200" width="1192" height="196" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <rect x="36" y="210" width="180" height="20" rx="4" fill="${t.accentTintStrong}" />
+        <text x="126" y="224" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="9" font-weight="600" text-anchor="middle">FLOW 2: VISUAL DIFF ENGINE</text>
+
+        <rect x="24" y="412" width="1192" height="184" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <rect x="36" y="422" width="200" height="20" rx="4" fill="${t.warningTint}" />
+        <text x="136" y="436" fill="${t.warning}" font-family="'Geist Mono', monospace" font-size="9" font-weight="600" text-anchor="middle">FLOW 3: MASTER IMAGE HEALING</text>
+
+        <rect x="24" y="612" width="1192" height="144" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <rect x="36" y="622" width="180" height="20" rx="4" fill="${t.successTint}" />
+        <text x="126" y="636" fill="${t.success}" font-family="'Geist Mono', monospace" font-size="9" font-weight="600" text-anchor="middle">FLOW 4: EXPORT PDF REPORT</text>
+
+        <!-- CONNECTORS FLOW 1 -->
+        <path d="M 216 104 L 272 104" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 464 104 L 520 104" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 712 104 L 768 104" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 960 104 L 1016 104" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+
+        <path d="M 1112 144 L 1112 172 Q 1112 184 1100 184 L 128 184 Q 116 184 116 196 L 116 260" 
+              fill="none" stroke="${t.accent}" stroke-width="1.4" stroke-dasharray="4,3" marker-end="url(#arrow-accent)" />
+
+        <!-- NODES FLOW 1 -->
+        <g class="clickable-node" onclick="showNodeDetail('f1-dept')">
+          <rect x="48" y="72" width="168" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="58" y="90" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">STEP 1.1</text>
+          <text x="132" y="106" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Choose Department</text>
+          <text x="132" y="122" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Filter by User Dept Scope</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f1-fetch')">
+          <rect x="272" y="72" width="192" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="282" y="90" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">API CALL</text>
+          <text x="368" y="106" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Query Job History</text>
+          <text x="368" y="122" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GET /api/v1/jobs?dept=ID</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f1-group')">
+          <rect x="520" y="72" width="192" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="530" y="90" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">FRONTEND</text>
+          <text x="616" y="106" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Group by Day / Time</text>
+          <text x="616" y="122" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Today · Yesterday · Past Runs</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f1-select')">
+          <rect x="768" y="72" width="192" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="778" y="90" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">USER ACTION</text>
+          <text x="864" y="106" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Select Target Job Card</text>
+          <text x="864" y="122" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Status: COMPLETED / FAILED</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f1-load')">
+          <rect x="1016" y="72" width="180" height="64" rx="6" fill="${t.accentTintStrong}" stroke="${t.accent}" stroke-width="1.4" class="node-box" />
+          <text x="1026" y="90" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">ACTIVE STATE</text>
+          <text x="1106" y="106" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Set Selected Job ID</text>
+          <text x="1106" y="122" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Mount Details Canvas</text>
+        </g>
+
+        <!-- CONNECTORS FLOW 2 -->
+        <path d="M 216 292 L 268 292" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 456 292 L 508 292" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 696 292 L 748 292" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+        <path d="M 940 292 L 992 292" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+
+        <!-- NODES FLOW 2 -->
+        <g class="clickable-node" onclick="showNodeDetail('f2-images')">
+          <rect x="48" y="260" width="168" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="58" y="278" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">INPUT ASSETS</text>
+          <text x="132" y="294" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Load Device Images</text>
+          <text x="132" y="310" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Master (B) vs New Run (A)</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f2-mask')">
+          <rect x="268" y="260" width="188" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="278" y="278" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">PRE-PROCESSING</text>
+          <text x="362" y="294" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Exclusion Masks</text>
+          <text x="362" y="310" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Red: Global / Green: Local</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f2-diffalgo')">
+          <rect x="508" y="260" width="188" height="68" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box" />
+          <text x="518" y="278" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">CORE ENGINE</text>
+          <text x="602" y="294" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Diff Algorithm (Celery)</text>
+          <text x="602" y="310" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Pixel Difference + SSIM Scan</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f2-highlight')">
+          <rect x="748" y="260" width="192" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="758" y="278" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">CLASSIFICATION</text>
+          <text x="844" y="294" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Status: PASS / FAIL / MISMATCH</text>
+          <text x="844" y="310" fill="${t.danger}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Bounding Box Overlay</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f2-inspector')">
+          <rect x="992" y="260" width="204" height="68" rx="6" fill="${t.accentTintStrong}" stroke="${t.accent}" stroke-width="1.4" class="node-box" />
+          <text x="1002" y="278" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">UI INSPECTOR</text>
+          <text x="1094" y="294" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Total Diff Points & Zoom</text>
+          <text x="1094" y="310" fill="${t.accent}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Side-by-Side Pan & Zoom</text>
+        </g>
+
+        <!-- CONNECTORS FLOW 3 -->
+        <path d="M 216 504 L 268 504" fill="none" stroke="${t.warning}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 460 504 L 512 504" fill="none" stroke="${t.warning}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 704 504 L 756 504" fill="none" stroke="${t.warning}" stroke-width="1.4" marker-end="url(#arrow-default)" />
+        <path d="M 952 504 L 1004 504" fill="none" stroke="${t.success}" stroke-width="1.4" marker-end="url(#arrow-success)" />
+
+        <!-- NODES FLOW 3 -->
+        <g class="clickable-node" onclick="showNodeDetail('f3-review')">
+          <rect x="48" y="472" width="168" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="58" y="490" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">QA REVIEW</text>
+          <text x="132" y="506" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Review Diff Changes</text>
+          <text x="132" y="522" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Intentional UI Update?</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f3-trigger')">
+          <rect x="268" y="472" width="192" height="64" rx="6" fill="${t.warningTint}" stroke="${t.warning}" stroke-width="1.2" class="node-box" />
+          <text x="278" y="490" fill="${t.warning}" font-size="8" font-family="'Geist Mono', monospace">HEAL TRIGGER</text>
+          <text x="364" y="506" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">"Update Master" Action</text>
+          <text x="364" y="522" fill="${t.warning}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Single Page or "Update All"</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f3-healapi')">
+          <rect x="512" y="472" width="192" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="522" y="490" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">BACKEND OP</text>
+          <text x="608" y="506" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Atomic Master Swap</text>
+          <text x="608" y="522" fill="${t.accent}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/jobs/{id}/heal</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f3-note')">
+          <rect x="756" y="472" width="196" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="766" y="490" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">GOVERNANCE</text>
+          <text x="854" y="506" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Record Flow Note & Audit</text>
+          <text x="854" y="522" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Ticket # / Reason · BASELINE_HEALED</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f3-sse')">
+          <rect x="1004" y="472" width="192" height="64" rx="6" fill="${t.successTint}" stroke="${t.success}" stroke-width="1.2" class="node-box" />
+          <text x="1014" y="490" fill="${t.success}" font-size="8" font-family="'Geist Mono', monospace">SYNC BROADCAST</text>
+          <text x="1100" y="506" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Real-time Push Sync</text>
+          <text x="1100" y="522" fill="${t.success}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">page_image_changed Event</text>
+        </g>
+
+        <!-- CONNECTORS FLOW 4 -->
+        <path d="M 216 684 L 288 684" fill="none" stroke="${t.success}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 496 684 L 568 684" fill="none" stroke="${t.success}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 776 684 L 848 684" fill="none" stroke="${t.success}" stroke-width="1.4" marker-end="url(#arrow-success)" />
+
+        <!-- NODES FLOW 4 -->
+        <g class="clickable-node" onclick="showNodeDetail('f4-click')">
+          <rect x="48" y="652" width="168" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="58" y="670" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">USER ACTION</text>
+          <text x="132" y="686" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Click "Export PDF"</text>
+          <text x="132" y="702" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Trigger Client Report</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f4-canvas')">
+          <rect x="288" y="652" width="208" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="298" y="670" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">PROCESSING</text>
+          <text x="392" y="686" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Convert Images to DataURL</text>
+          <text x="392" y="702" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">HTML5 Canvas · Progress 0-100%</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f4-compile')">
+          <rect x="568" y="652" width="208" height="64" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box" />
+          <text x="578" y="670" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">GENERATOR</text>
+          <text x="672" y="686" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Compile A4 Landscape PDF</text>
+          <text x="672" y="702" fill="${t.muted}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Side-by-Side: Master / New / Diff</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('f4-download')">
+          <rect x="848" y="652" width="348" height="64" rx="6" fill="${t.successTint}" stroke="${t.success}" stroke-width="1.4" class="node-box" />
+          <text x="858" y="670" fill="${t.success}" font-size="8" font-family="'Geist Mono', monospace">DELIVERABLE</text>
+          <text x="1022" y="686" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Download Verification Report</text>
+          <text x="1022" y="702" fill="${t.success}" font-size="8.5" font-family="'Geist Mono', monospace" text-anchor="middle">Audit-Ready Artifact · Pass/Fail Stats & Timestamp</text>
+        </g>
+
+        <!-- Legend / Footer -->
+        <line x1="40" y1="784" x2="1200" y2="784" stroke="${t.ruleSolid}" stroke-width="0.8" />
+        <text x="40" y="806" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" letter-spacing="0.14em">DASHBOARD WORKFLOW CONTROLS</text>
+        <text x="320" y="806" fill="${t.muted}" font-size="10" font-family="'Geist', sans-serif">Click any step box to view source code references (Dashboard.jsx, endpoints.py) and API specs.</text>
+      </svg>
+      `;
+    }
+
+    // -----------------------------------------------------------------
+    // VIEW 3: DETAILED SUB-FLOW FOR MENU 02 — RUN TEST
+    // -----------------------------------------------------------------
+    function renderRunTestSvg(t) {
+      return `
+      <svg role="img" aria-labelledby="rv-run-title rv-run-desc" viewBox="0 0 1240 680" width="1240" height="680">
+        <title id="rv-run-title">Menu 02: Run Test Execution Architecture</title>
+        <desc id="rv-run-desc">End-to-end execution pipeline from flow configuration and image upload to asynchronous Celery dispatch and SSE progress tracking.</desc>
+        ${buildSvgDefs(t)}
+        <rect width="100%" height="100%" fill="${t.paper}" />
+
+        <rect x="24" y="32" width="370" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="44" y="60" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">STAGE 1: TARGET FLOW RESOLUTION</text>
+
+        <rect x="420" y="32" width="400" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="440" y="60" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">STAGE 2: IMAGE INGESTION & MATCH STRATEGY</text>
+
+        <rect x="846" y="32" width="370" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="866" y="60" fill="${t.success}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">STAGE 3: WORKER QUEUE & SSE STREAM</text>
+
+        <path d="M 364 120 L 444 120" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 364 240 L 444 240" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 780 240 L 870 240" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+        <path d="M 780 400 L 870 400" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step1')">
+          <rect x="44" y="88" width="320" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="54" y="106" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">1. SCOPE RESOLUTION</text>
+          <text x="204" y="122" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Select Department & Squad</text>
+          <text x="204" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Enforces Tenant Boundary Isolation</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step2')">
+          <rect x="44" y="208" width="320" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="54" y="226" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">2. FLOW DISCOVERY</text>
+          <text x="204" y="242" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Choose Verification Flow</text>
+          <text x="204" y="258" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GET /api/v1/flows?squad_id=X</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step3')">
+          <rect x="44" y="328" width="320" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="54" y="346" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">3. MASTER REFERENCE</text>
+          <text x="204" y="362" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Load Target Master Baseline</text>
+          <text x="204" y="378" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Displays Expected Page Sequence</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step4')">
+          <rect x="444" y="88" width="336" height="68" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box"/>
+          <text x="454" y="106" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">4. INGESTION</text>
+          <text x="612" y="122" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Upload New Test Images (Files A)</text>
+          <text x="612" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Multi-file Drag & Drop / Robot API</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step5')">
+          <rect x="444" y="208" width="336" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="454" y="226" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">5. MATCH LOGIC</text>
+          <text x="612" y="242" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Order-Based Matching (DND)</text>
+          <text x="612" y="258" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Sequential Page Align vs Filename</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step6')">
+          <rect x="444" y="368" width="336" height="68" rx="6" fill="${t.accentTintStrong}" stroke="${t.accent}" stroke-width="1.4" class="node-box"/>
+          <text x="454" y="386" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">6. DISPATCH API</text>
+          <text x="612" y="402" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Trigger Execution Request</text>
+          <text x="612" y="418" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST /api/v1/jobs/compare</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step7')">
+          <rect x="870" y="88" width="320" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="880" y="106" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">7. TASK QUEUE</text>
+          <text x="1030" y="122" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Enqueue Job in Redis</text>
+          <text x="1030" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Task: process_comparison_job</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step8')">
+          <rect x="870" y="208" width="320" height="68" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box"/>
+          <text x="880" y="226" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">8. CELERY EXECUTION</text>
+          <text x="1030" y="242" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Async Worker Processing</text>
+          <text x="1030" y="258" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pixel by Pixel + Mask Exclusions</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('run-step9')">
+          <rect x="870" y="368" width="320" height="68" rx="6" fill="${t.successTint}" stroke="${t.success}" stroke-width="1.4" class="node-box"/>
+          <text x="880" y="386" fill="${t.success}" font-size="8" font-family="'Geist Mono', monospace">9. LIVE TELEMETRY</text>
+          <text x="1030" y="402" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">SSE Progress Stream</text>
+          <text x="1030" y="418" fill="${t.success}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Broadcast 0-100% -> Auto Route to Dashboard</text>
+        </g>
+
+        <line x1="40" y1="620" x2="1200" y2="620" stroke="${t.ruleSolid}" stroke-width="0.8" />
+        <text x="40" y="644" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" letter-spacing="0.14em">RUN TEST EXECUTION PROTOCOL</text>
+      </svg>
+      `;
+    }
+
+    // -----------------------------------------------------------------
+    // VIEW 4: DETAILED SUB-FLOW FOR MENU 03 — SETTINGS
+    // -----------------------------------------------------------------
+    function renderSettingsSvg(t) {
+      return `
+      <svg role="img" aria-labelledby="rv-set-title rv-set-desc" viewBox="0 0 1240 680" width="1240" height="680">
+        <title id="rv-set-title">Menu 03: Settings & Masking Architecture</title>
+        <desc id="rv-set-desc">Folder tree hierarchy, Page ordering, Master Image upload, and Red/Green Masking Canvas editor.</desc>
+        ${buildSvgDefs(t)}
+        <rect width="100%" height="100%" fill="${t.paper}" />
+
+        <rect x="24" y="32" width="360" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="44" y="60" fill="${t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">1. FOLDER & FLOW HIERARCHY</text>
+
+        <rect x="410" y="32" width="400" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="430" y="60" fill="${t.accent}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">2. PAGE SEQUENCING & MASTER UPLOAD</text>
+
+        <rect x="836" y="32" width="380" height="560" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+        <text x="856" y="60" fill="${t.danger}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.12em">3. MASKING CANVAS & AUTO-STATUS-BAR</text>
+
+        <path d="M 354 120 L 434 120" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 354 260 L 434 260" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+        <path d="M 780 260 L 860 260" fill="none" stroke="${t.accent}" stroke-width="1.4" marker-end="url(#arrow-accent)" />
+        <path d="M 780 400 L 860 400" fill="none" stroke="${t.danger}" stroke-width="1.4" marker-end="url(#arrow-danger)" />
+
+        <g class="clickable-node" onclick="showNodeDetail('set-tree')">
+          <rect x="44" y="88" width="310" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="54" y="106" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">TREE VIEW</text>
+          <text x="199" y="122" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Folders & Flows Tree</text>
+          <text x="199" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Dept -> Squad -> Folder -> Flow</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('set-flowcrud')">
+          <rect x="44" y="228" width="310" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="54" y="246" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">CRUD OPERATIONS</text>
+          <text x="199" y="262" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Flow & Folder Management</text>
+          <text x="199" y="278" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">POST/PUT/DELETE /api/v1/flows</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('set-pageorder')">
+          <rect x="434" y="88" width="346" height="68" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="444" y="106" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">ORDERING</text>
+          <text x="607" y="122" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Drag & Drop Page Reordering</text>
+          <text x="607" y="138" fill="${t.muted}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">@hello-pangea/dnd · sort_order Index</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('set-uploadmaster')">
+          <rect x="434" y="228" width="346" height="68" rx="6" fill="${t.accentTint}" stroke="${t.accent}" stroke-width="1.2" class="node-box"/>
+          <text x="444" y="246" fill="${t.accent}" font-size="8" font-family="'Geist Mono', monospace">MASTER STORAGE</text>
+          <text x="607" y="262" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Upload Base Reference Image</text>
+          <text x="607" y="278" fill="${t.accent}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Saved to /app/output/flows/{id}</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('set-maskcanvas')">
+          <rect x="860" y="88" width="330" height="80" rx="6" fill="${t.paperCard}" stroke="${t.ruleSolid}" stroke-width="1" class="node-box"/>
+          <text x="870" y="106" fill="${t.soft}" font-size="8" font-family="'Geist Mono', monospace">MASKING CANVAS</text>
+          <text x="1025" y="124" fill="${t.ink}" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Interactive Exclusion Canvas</text>
+          <text x="1025" y="142" fill="${t.danger}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">🔴 Red: Global (Flow-wide Status Bar)</text>
+          <text x="1025" y="156" fill="${t.success}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">🟢 Green: Local (Page Dynamic Region)</text>
+        </g>
+
+        <g class="clickable-node" onclick="showNodeDetail('set-autostatus')">
+          <rect x="860" y="228" width="330" height="72" rx="6" fill="${t.dangerTint}" stroke="${t.danger}" stroke-width="1.2" class="node-box"/>
+          <text x="870" y="246" fill="${t.danger}" font-size="8" font-family="'Geist Mono', monospace">AUTO-CALCULATION</text>
+          <text x="1025" y="264" fill="${t.ink}" font-size="12" font-weight="700" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">Auto Global Status Bar Mask</text>
+          <text x="1025" y="282" fill="${t.danger}" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">h = max(50, round(img_h * 5.2%))</text>
+        </g>
+
+        <line x1="40" y1="620" x2="1200" y2="620" stroke="${t.ruleSolid}" stroke-width="0.8" />
+        <text x="40" y="644" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" letter-spacing="0.14em">FLOW HIERARCHY & MASK PROTOCOL</text>
+      </svg>
+      `;
+    }
+
+    // -----------------------------------------------------------------
+    // VIEW 5: DETAILED SUB-FLOW FOR MENUS 04 TO 10
+    // -----------------------------------------------------------------
+    function renderGenericSubflowSvg(menuKey, t) {
+      const menuData = {
+        'org': {
+          title: 'Menu 04: Organization & Multi-Tenant Boundaries',
+          desc: 'Departments & Squads hierarchy ensuring rigorous data isolation across banking entities.',
+          steps: [
+            { id: 'org-dept', step: '1. DEPARTMENTS', title: 'Department CRUD', sub: 'Banking Department Entity', detail: 'Root tenant grouping. Users and flows bind to department IDs.' },
+            { id: 'org-squad', step: '2. SQUADS', title: 'Squad Scoping', sub: 'Agile Feature Teams', detail: 'Sub-divisions within a department with isolated flows and run histories.' },
+            { id: 'org-isolation', step: '3. DATA ISOLATION', title: 'Scope Enforcement', sub: 'Enforced at Database & API', detail: 'Users only view their squad/department assets unless granted SuperAdmin.' },
+            { id: 'org-storage', step: '4. METRICS MAPPING', title: 'Storage Breakdown', sub: 'Telemetry per Squad', detail: 'Disk usage and image count attributed per department and squad.' }
+          ]
+        },
+        'manage-users': {
+          title: 'Menu 05: User Lifecycle, Approvals & Security',
+          desc: 'Self-registration approval queue, session management, and instant administrative force-logout.',
+          steps: [
+            { id: 'usr-reg', step: '1. REGISTRATION', title: 'Pending Approval Queue', sub: 'Status: PENDING', detail: 'Self-registered users enter queue; sidebar badge increments via SSE event.' },
+            { id: 'usr-approve', step: '2. ADMIN DECISION', title: 'Approve & Assign Role', sub: 'Role + Department Binding', detail: 'Admin approves user, allocates Department and RBAC Custom Role.' },
+            { id: 'usr-pwd', step: '3. PASSWORD POLICY', title: 'Force Password Change', sub: 'must_change_password Flag', detail: 'First login forces password change to comply with security standards.' },
+            { id: 'usr-logout', step: '4. FORCE TERMINATION', title: 'Real-time Session Revocation', sub: 'SSE force_logout Broadcast', detail: 'Suspending or resetting user pushes force_logout event, ejecting active session.' }
+          ]
+        },
+        'manage-roles': {
+          title: 'Menu 06: Granular RBAC & Menu Permissions',
+          desc: 'Role-Based Access Control matrix mapping custom roles to individual sidebar menu access.',
+          steps: [
+            { id: 'role-define', step: '1. ROLE DEFINITION', title: 'Create Custom Role', sub: 'Admin vs Custom Role', detail: 'Define tailored enterprise roles (e.g. QA Automation, Auditor, Viewer).' },
+            { id: 'role-matrix', step: '2. PERMISSION MATRIX', title: 'Menu Access Binding', sub: '10 Sidebar Checkboxes', detail: 'Granular array of menu keys (dashboard, run, org, monitor, etc.).' },
+            { id: 'role-guard', step: '3. ROUTE GUARD', title: 'React ProtectedRoute', sub: 'menuKey Verification', detail: 'Client router restricts URL navigation; unauthorized attempts redirect to Dashboard.' },
+            { id: 'role-apiguard', step: '4. BACKEND ENFORCEMENT', title: 'FastAPI Dependency', sub: 'require_admin / menu_check', detail: 'Server-side validation rejects API requests lacking role authorization.' }
+          ]
+        },
+        'api-keys': {
+          title: 'Menu 07: CI/CD API Keys & Machine Access',
+          desc: 'Cryptographic machine tokens for automated headless test execution in Jenkins & Robot Framework.',
+          steps: [
+            { id: 'key-issue', step: '1. GENERATION', title: 'Issue API Token', sub: 'Scoped to Department', detail: 'User creates token with description and expiration.' },
+            { id: 'key-hash', step: '2. ONE-TIME SECRET', title: 'Plaintext Reveal', sub: 'SHA-256 Hash in DB', detail: 'Secret shown once; stored as irreversible cryptographic hash in database.' },
+            { id: 'key-ci', step: '3. CI INTEGRATION', title: 'Jenkins / Robot Framework', sub: 'Header: X-API-Key', detail: 'Automated test suite sends key in header without human credentials.' },
+            { id: 'key-audit', step: '4. LIFECYCLE AUDIT', title: 'Usage Tracking & Revoke', sub: 'last_used_at Timestamp', detail: 'Tracks execution timestamps; instant single-click token revocation.' }
+          ]
+        },
+        'config': {
+          title: 'Menu 08: System Configuration & Algorithmic Limits',
+          desc: 'Global parameters governing visual comparison tolerance, retention limits, and image alignment.',
+          steps: [
+            { id: 'cfg-thresh', step: '1. COMPARISON TUNING', title: 'Diff Sensitivity Threshold', sub: 'Tolerance & SSIM Factors', detail: 'Adjust color difference tolerances and acceptable pixel drift margins.' },
+            { id: 'cfg-retention', step: '2. RETENTION POLICY', title: 'Max Job History Limit', sub: 'Storage Safeguards', detail: 'Configures auto-pruning thresholds to avoid disk exhaustion on /app/output.' },
+            { id: 'cfg-align', step: '3. PRE-PROCESSING', title: 'OCR & Image Alignment', sub: 'Feature Matching Toggles', detail: 'Toggles for automated OpenCV shift compensation and OCR text verification.' },
+            { id: 'cfg-persist', step: '4. RUNTIME PERSISTENCE', title: 'SystemConfig Table', sub: 'Live Worker Sync', detail: 'FastAPI and Celery reload configs dynamically without server downtime.' }
+          ]
+        },
+        'monitor': {
+          title: 'Menu 09: System Telemetry & Resource Observability',
+          desc: 'Live infrastructure monitoring, Celery queue depth, and squad-level disk consumption.',
+          steps: [
+            { id: 'mon-hardware', step: '1. HOST METRICS', title: 'CPU, Memory & Storage', sub: 'psutil Backend Telemetry', detail: 'Real-time CPU percentage, RAM consumption, and root volume capacity.' },
+            { id: 'mon-queue', step: '2. QUEUE HEALTH', title: 'Celery & Redis Status', sub: 'Active & Queued Tasks', detail: 'Inspects worker concurrency, backlog length, and failed task counters.' },
+            { id: 'mon-squad', step: '3. SQUAD STORAGE', title: 'Disk Usage Breakdown', sub: 'Department / Squad Analysis', detail: 'Calculates megabytes consumed by Master vs Diff images per squad.' },
+            { id: 'mon-stream', step: '4. SSE PULSE', title: 'EventSource Heartbeat', sub: 'Active SSE Client Count', detail: 'Tracks live connected browser tabs and event broadcaster throughput.' }
+          ]
+        },
+        'activity-log': {
+          title: 'Menu 10: Enterprise Audit Trail & Compliance Log',
+          desc: 'Immutable security log with 90-day retention recording all system events and master updates.',
+          steps: [
+            { id: 'log-ingest', step: '1. EVENT LOGGING', title: 'Structured Audit Log', sub: 'audit_logger.py Engine', detail: 'Captures user, IP address, event type, module, and detailed JSON payload.' },
+            { id: 'log-critical', step: '2. CRITICAL EVENTS', title: 'Sensitive Actions Tracked', sub: 'BASELINE_HEALED / MASK_EDIT', detail: 'Every Master image replacement and permission escalation is logged permanently.' },
+            { id: 'log-filter', step: '3. AUDIT INSPECTION', title: 'Multi-criteria Query', sub: 'Filter by Module & Level', detail: 'Filter records by User, Event (INFO/WARN/ERROR), Module, and Date Range.' },
+            { id: 'log-retention', step: '4. 90-DAY RETENTION', title: 'Banking Compliance', sub: 'Rotating Daily Log Files', detail: 'Guaranteed 90-day retention meeting financial audit and SOC-2 guidelines.' }
+          ]
+        }
+      };
+
+      const data = menuData[menuKey] || menuData['org'];
+
+      return `
+      <svg role="img" aria-labelledby="rv-${menuKey}-title rv-${menuKey}-desc" viewBox="0 0 1240 600" width="1240" height="600">
+        <title id="rv-${menuKey}-title">${data.title}</title>
+        <desc id="rv-${menuKey}-desc">${data.desc}</desc>
+        ${buildSvgDefs(t)}
+        <rect width="100%" height="100%" fill="${t.paper}" />
+
+        ${data.steps.map((s, idx) => {
+          const x = 32 + idx * 296;
+          return `
+            <rect x="${x}" y="40" width="276" height="480" rx="8" fill="${t.paper2}" stroke="${t.rule}" stroke-width="1" />
+            <text x="${x + 20}" y="72" fill="${idx === 1 ? t.accent : t.soft}" font-family="'Geist Mono', monospace" font-size="10" font-weight="600" letter-spacing="0.1em">${s.step}</text>
+
+            <g class="clickable-node" onclick="showNodeDetail('${s.id}')">
+              <rect x="${x + 20}" y="100" width="236" height="100" rx="6" fill="${idx === 1 ? t.accentTintStrong : t.paperCard}" stroke="${idx === 1 ? t.accent : t.ruleSolid}" stroke-width="${idx === 1 ? '1.5' : '1'}" class="node-box" />
+              <text x="${x + 138}" y="136" fill="${t.ink}" font-size="13" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle" class="node-title">${s.title}</text>
+              <text x="${x + 138}" y="158" fill="${idx === 1 ? t.accent : t.muted}" font-size="9.5" font-family="'Geist Mono', monospace" text-anchor="middle">${s.sub}</text>
+            </g>
+
+            <rect x="${x + 20}" y="224" width="236" height="260" rx="6" fill="${t.paper}" stroke="${t.rule}" stroke-width="1" />
+            <text x="${x + 36}" y="254" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600">SPECIFICATION & DETAILS</text>
+            <foreignObject x="${x + 36}" y="268" width="204" height="200">
+              <div xmlns="http://www.w3.org/1999/xhtml" style="font-size: 11.5px; color: ${t.muted}; line-height: 1.5; font-family: 'Geist', sans-serif;">
+                ${s.detail}
+                <br/><br/>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10px; color: ${t.accent};">✓ Verified Architecture Node</span>
+              </div>
+            </foreignObject>
+
+            ${idx < 3 ? `
+              <path d="M ${x + 276} y 150 L ${x + 296} y 150" fill="none" stroke="${t.muted}" stroke-width="1.2" marker-end="url(#arrow-default)" />
+            ` : ''}
+          `;
+        }).join('')}
+
+        <line x1="40" y1="550" x2="1200" y2="550" stroke="${t.ruleSolid}" stroke-width="0.8" />
+        <text x="40" y="574" fill="${t.soft}" font-size="9" font-family="'Geist Mono', monospace" font-weight="600" letter-spacing="0.14em">ARCHITECTURE BLUEPRINT · CLICK ANY NODE TO INSPECT CODE SPEC</text>
+      </svg>
+      `;
+    }
+
+    function switchView(viewKey) {
+      currentView = viewKey;
+
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      const activeTab = document.getElementById(`tab-${viewKey}`);
+      if (activeTab) activeTab.classList.add('active');
+
+      const viewBadge = document.getElementById('current-view-badge');
+      const pageTitle = document.getElementById('page-title');
+      const pageSubtitle = document.getElementById('page-subtitle');
+
+      if (viewKey === 'overview') {
+        viewBadge.textContent = 'VIEW: OVERVIEW TOPOLOGY';
+        pageTitle.textContent = 'Robot Verify System Topology';
+        pageSubtitle.textContent = 'High-level architectural blueprint mapping client ingress, gateway, 10 core sidebar menus, and async processing engines.';
+      } else if (viewKey === 'dashboard') {
+        viewBadge.textContent = 'VIEW: MENU 01 — DASHBOARD';
+        pageTitle.textContent = 'Dashboard: Detailed Execution & Inspection Flow';
+        pageSubtitle.textContent = 'Comprehensive sub-flows: 1) Job History Exploration, 2) Visual Diff Algorithm, 3) Master Healing, and 4) PDF Report Generation.';
+      } else if (viewKey === 'run') {
+        viewBadge.textContent = 'VIEW: MENU 02 — RUN TEST';
+        pageTitle.textContent = 'Run Test: Ingestion, Matching & Celery Pipeline';
+        pageSubtitle.textContent = 'Multi-image upload, order-based sequential drag-and-drop matching, Redis queuing, and real-time SSE progress telemetry.';
+      } else if (viewKey === 'setting') {
+        viewBadge.textContent = 'VIEW: MENU 03 — SETTINGS';
+        pageTitle.textContent = 'Settings: Flow Tree & Exclusion Masking Canvas';
+        pageSubtitle.textContent = 'Hierarchical folder navigation, page reordering, master image management, and auto status-bar mask computation.';
+      } else {
+        const labels = {
+          'org': 'Menu 04: Organization & Multi-Tenant Boundaries',
+          'manage-users': 'Menu 05: User Lifecycle & Approvals Queue',
+          'manage-roles': 'Menu 06: Granular RBAC Permission Matrix',
+          'api-keys': 'Menu 07: CI/CD Machine API Tokens',
+          'config': 'Menu 08: Global System Config & Retention',
+          'monitor': 'Menu 09: System Telemetry & Storage Observability',
+          'activity-log': 'Menu 10: Enterprise Audit Trail (90-Day Retention)'
+        };
+        viewBadge.textContent = `VIEW: ${labels[viewKey] || viewKey.toUpperCase()}`;
+        pageTitle.textContent = labels[viewKey] || 'Detailed Sub-Flow';
+        pageSubtitle.textContent = 'Interactive operational specification detailing endpoints, data contracts, and security rules.';
+      }
+
+      renderCurrentView();
+      updateSummaryCards(viewKey);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderCurrentView() {
+      const tokens = getThemeTokens();
+      const container = document.getElementById('svg-container');
+
+      if (currentView === 'overview') {
+        container.innerHTML = renderOverviewSvg(tokens);
+      } else if (currentView === 'dashboard') {
+        container.innerHTML = renderDashboardSvg(tokens);
+      } else if (currentView === 'run') {
+        container.innerHTML = renderRunTestSvg(tokens);
+      } else if (currentView === 'setting') {
+        container.innerHTML = renderSettingsSvg(tokens);
+      } else {
+        container.innerHTML = renderGenericSubflowSvg(currentView, tokens);
+      }
+    }
+
+    function updateSummaryCards(viewKey) {
+      const summarySection = document.getElementById('summary-section');
+
+      if (viewKey === 'dashboard') {
+        summarySection.innerHTML = `
+          <div class="card">
+            <p class="eyebrow">DIFF COMPARISON ENGINE</p>
+            <div class="card-header">
+              <span class="card-dot blue"></span>
+              <h3 class="card-title">Three-Image Comparison Matrix</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Device B:</strong> Reference Master image loaded from <span class="badge">/app/output/flows</span></li>
+              <li><strong>Device A:</strong> Newly captured test run image uploaded by user or Jenkins CI.</li>
+              <li><strong>Diff Image:</strong> OpenCV pixel subtraction with highlighted red discrepancy bounding boxes.</li>
+              <li><strong>Diff Points:</strong> Precise calculation of mismatched pixel coordinates excluding masked regions.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">MASTER HEALING GOVERNANCE</p>
+            <div class="card-header">
+              <span class="card-dot slate"></span>
+              <h3 class="card-title">Update Master & Audit Flow</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Atomic File Copy:</strong> Instantly promotes Device A image into the master reference directory.</li>
+              <li><strong>Mandatory Flow Note:</strong> Prompts SweetAlert modal for change justification and Jira ticket reference.</li>
+              <li><strong>Real-time Broadcast:</strong> Pushes <span class="badge">page_image_changed</span> via SSE to all active clients.</li>
+              <li><strong>Audit Stamp:</strong> Logs <span class="badge">BASELINE_HEALED</span> event with user credentials and timestamp.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">EXECUTIVE REPORTING</p>
+            <div class="card-header">
+              <span class="card-dot green"></span>
+              <h3 class="card-title">Client-Side PDF Generation</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Format:</strong> High-resolution A4 Landscape compiled via <span class="badge">jsPDF</span> + HTML5 Canvas.</li>
+              <li><strong>Executive Metrics:</strong> Summary banner with Total Runs, Pass Rate %, and Diff Point tallies.</li>
+              <li><strong>Side-by-Side:</strong> Direct visual comparison proof suitable for banking audit and release sign-off.</li>
+            </ul>
+          </div>
+        `;
+      } else if (viewKey === 'run') {
+        summarySection.innerHTML = `
+          <div class="card">
+            <p class="eyebrow">INGESTION & MATCHING</p>
+            <div class="card-header">
+              <span class="card-dot blue"></span>
+              <h3 class="card-title">Compare by Order vs Filename</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Order Matching:</strong> Enables drag-and-drop sequential alignment of uploaded images to match flow pages.</li>
+              <li><strong>Filename Matching:</strong> Direct alphanumeric mapping for automated Jenkins script artifacts.</li>
+              <li><strong>Validation:</strong> Checks dimensions and image formats before dispatching to worker.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">ASYNC PROCESSING</p>
+            <div class="card-header">
+              <span class="card-dot slate"></span>
+              <h3 class="card-title">Celery & Redis Worker Cluster</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Queue Decoupling:</strong> Prevents HTTP timeouts when processing 50+ high-resolution screenshots.</li>
+              <li><strong>Concurrency:</strong> Multi-worker parallelization backed by PostgreSQL transaction locking.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">LIVE TELEMETRY</p>
+            <div class="card-header">
+              <span class="card-dot green"></span>
+              <h3 class="card-title">SSE Broadcast Stream</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Endpoint:</strong> <span class="badge">/api/v1/jobs/stream</span></li>
+              <li><strong>Real-time Progress:</strong> Zero-polling progress updates pushed to frontend during test execution.</li>
+            </ul>
+          </div>
+        `;
+      } else {
+        summarySection.innerHTML = `
+          <div class="card">
+            <p class="eyebrow">ENTERPRISE SECURITY & RBAC</p>
+            <div class="card-header">
+              <span class="card-dot blue"></span>
+              <h3 class="card-title">Multi-Tenant Isolation</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Department Isolation:</strong> Bank departments maintain strict boundaries; jobs and flows remain partitioned.</li>
+              <li><strong>Role-Based Menus:</strong> Dynamic sidebar rendering driven by user menu_permissions matrix.</li>
+              <li><strong>Brute-force Shield:</strong> Rate limiting and login challenge verification prevent credential attacks.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">INFRASTRUCTURE STACK</p>
+            <div class="card-header">
+              <span class="card-dot slate"></span>
+              <h3 class="card-title">Containerized Blueprint</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>FastAPI:</strong> Asynchronous Python 3.10 gateway with SQLAlchemy ORM and Pydantic validation.</li>
+              <li><strong>PostgreSQL 15:</strong> Relational storage for flows, masks, user profiles, and audit records.</li>
+              <li><strong>File Storage:</strong> Mounted volume <span class="badge">/app/output</span> storing reference masters and runs.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <p class="eyebrow">COMPLIANCE & GOVERNANCE</p>
+            <div class="card-header">
+              <span class="card-dot green"></span>
+              <h3 class="card-title">90-Day Audit Guarantee</h3>
+            </div>
+            <ul class="card-list">
+              <li><strong>Audit Logging:</strong> All administrative modifications and healing actions written to daily rotating logs.</li>
+              <li><strong>Observability:</strong> Continuous telemetry of CPU, RAM, Celery queues, and squad disk usage.</li>
+            </ul>
+          </div>
+        `;
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // Interactive Node Specification Inspector (Side Drawer)
+    // -----------------------------------------------------------------
+    const nodeDatabase = {
+      'actor-web': {
+        title: 'QA & Test Engineers (Browser Web App)',
+        eyebrow: 'INGRESS ACTOR',
+        desc: 'Frontline QA analysts and test automation engineers interacting with Robot Verify via the React Single Page Application.',
+        specs: [
+          ['Interface', 'React 18 + Vite + Tailwind CSS'],
+          ['Auth Mechanism', 'JWT Bearer Token in localStorage'],
+          ['Live Channel', 'Server-Sent Events (SSE) /jobs/stream'],
+          ['Key Workflows', 'Visual Diff Inspection, Master Healing, Test Triggering']
+        ],
+        audit: 'User sessions are monitored. Multiple simultaneous logins trigger interactive login challenges.'
+      },
+      'actor-ci': {
+        title: 'Jenkins & Robot Framework CI/CD Automation',
+        eyebrow: 'HEADLESS ACTOR',
+        desc: 'Continuous integration pipelines executing regression suites after each build deploy, communicating headlessly via REST API.',
+        specs: [
+          ['Auth Header', '<code>X-API-Key: rv_live_...</code>'],
+          ['Trigger Endpoint', '<code>POST /api/v1/jobs/compare</code>'],
+          ['Payload', 'Multipart form: Flow ID, files, compare_by_order flag'],
+          ['Exit Codes', 'Returns Job ID immediately; polls or waits for webhook completion']
+        ],
+        audit: 'All automated runs logged under the API key identity with timestamp and source IP.'
+      },
+      'actor-admin': {
+        title: 'Admin & Security Compliance Team',
+        eyebrow: 'ADMINISTRATIVE ACTOR',
+        desc: 'Super admins and security auditors managing user lifecycles, access roles, system thresholds, and audit trails.',
+        specs: [
+          ['Role', 'Super Admin (ADMIN)'],
+          ['Capabilities', 'User Approval, Forced Logout, System Config, Audit Export'],
+          ['Scope', 'Cross-department system governance']
+        ],
+        audit: 'All administrative actions stamped with user identity and IP in Activity Log.'
+      },
+      'gw-nginx': {
+        title: 'Nginx Reverse Proxy & Static Host',
+        eyebrow: 'GATEWAY COMPONENT',
+        desc: 'Edge reverse proxy serving optimized frontend bundles and forwarding backend requests to the internal FastAPI container.',
+        specs: [
+          ['Ports', ':80 (HTTP) -> :443 (SSL/TLS)'],
+          ['Reverse Proxy', 'Passes /api/v1 and /output to FastAPI :8000'],
+          ['Static Assets', 'Gzip / Brotli compressed React SPA bundle'],
+          ['Buffering', 'proxy_buffering off for SSE streaming']
+        ],
+        audit: 'Standard Nginx access.log and error.log retained.'
+      },
+      'gw-fastapi': {
+        title: 'FastAPI Backend Application Gateway',
+        eyebrow: 'CORE BACKEND SERVICE',
+        desc: 'High-performance Python ASGI backend handling REST routing, authentication, business logic, and Celery task dispatching.',
+        specs: [
+          ['Framework', 'Python 3.10 + FastAPI + Uvicorn'],
+          ['ORM', 'SQLAlchemy 2.0 + Alembic migrations'],
+          ['Security', 'JWT HS256, bcrypt password hashing, OWASP rate limiter'],
+          ['Dependencies', 'get_db, get_current_user, require_admin']
+        ],
+        audit: 'Central audit logger interceptor logs all mutating operations to daily disk audit files.'
+      },
+      'gw-sse': {
+        title: 'Server-Sent Events (SSE) Event Broadcaster',
+        eyebrow: 'REAL-TIME EVENT BUS',
+        desc: 'Lightweight unidirectional real-time event pipeline implemented with asyncio.Queue broadcasting instant updates to connected browser clients.',
+        specs: [
+          ['Endpoint', '<code>GET /api/v1/jobs/stream</code>'],
+          ['Events Broadcast', 'job_progress, page_image_changed, user_registered, force_logout, session_revoked'],
+          ['Keepalive', 'Ping comment emitted every 15 seconds'],
+          ['Zero-Polling', 'Eliminates repetitive HTTP requests from client browsers']
+        ],
+        audit: 'Connection opens and disconnects tracked in System Monitor telemetry.'
+      },
+      'worker-celery': {
+        title: 'Celery Distributed Diff Worker',
+        eyebrow: 'PROCESSING CLUSTER',
+        desc: 'Asynchronous workers executing compute-heavy image subtraction, exclusion mask calculations, and diff metrics extraction.',
+        specs: [
+          ['Task Function', '<code>compare_images_task (tasks.py)</code>'],
+          ['Image Processing', 'OpenCV (cv2), Pillow (PIL), NumPy array masking'],
+          ['Exclusion Logic', 'Applies Red (Global) & Green (Local) mask rects prior to pixel delta'],
+          ['Output Generation', 'Generates colored bounding box diff PNGs into /app/output/jobs/{id}/diff/']
+        ],
+        audit: 'Execution duration and total diff points written to database upon job completion.'
+      },
+      'store-redis': {
+        title: 'Redis 7 Message Broker & Cache',
+        eyebrow: 'MESSAGE BROKER',
+        desc: 'In-memory data store acting as Celery broker, task queue buffer, and session state coordination layer.',
+        specs: [
+          ['Port', ':6379'],
+          ['Broker URL', '<code>redis://redis:6379/0</code>'],
+          ['Persistence', 'RDB snapshotting enabled'],
+          ['Queue Depth', 'Monitored in real-time via System Monitor dashboard']
+        ],
+        audit: 'Protects backend from overload during high-volume CI/CD test bursts.'
+      },
+      'store-fs': {
+        title: 'Persistent Storage Volume (/app/output)',
+        eyebrow: 'FILE SYSTEM VOLUME',
+        desc: 'Docker volume persisting master reference images, historical test run captures, and rendered diff artifacts.',
+        specs: [
+          ['Path Structure', '<code>/app/output/flows/{id}/</code> (Masters)<br/><code>/app/output/jobs/{id}/device_a/</code> (New)<br/><code>/app/output/jobs/{id}/diff/</code> (Diffs)'],
+          ['Format', 'Lossless PNG / high-resolution JPEG'],
+          ['Backup', 'Nightly rsync snapshotting script'],
+          ['Retention', 'Pruned based on SystemConfig max_job_history settings']
+        ],
+        audit: 'Disk usage monitored by squad in System Monitor to prevent capacity breach.'
+      },
+      'store-db': {
+        title: 'PostgreSQL 15 Relational Database',
+        eyebrow: 'PRIMARY DATABASE',
+        desc: 'Enterprise relational store managing structured records, multi-tenant hierarchy, RBAC permissions, and job logs.',
+        specs: [
+          ['Port', ':5432'],
+          ['Key Tables', '<code>users, roles, departments, squads, flows, pages, masks, jobs, job_results, activity_logs, system_configs</code>'],
+          ['Integrity', 'Foreign key cascades, unique constraints on usernames/squads'],
+          ['Connection Pool', 'SQLAlchemy QueuePool with pre-ping validation']
+        ],
+        audit: 'Database backups created via automated backup scripts and cron.'
+      },
+      'f1-dept': {
+        title: 'Choose Department Filter',
+        eyebrow: 'DASHBOARD STEP 1.1',
+        desc: 'Narrows down test history to specific department scope. Regular users are pinned to their assigned department.',
+        specs: [
+          ['Endpoint', '<code>GET /api/v1/org/departments</code>'],
+          ['Enforcement', 'Non-admin users cannot bypass assigned department_id']
+        ],
+        audit: 'Filters out unpermitted job records automatically.'
+      },
+      'f1-fetch': {
+        title: 'Query Job History API',
+        eyebrow: 'DASHBOARD STEP 1.2',
+        desc: 'Fetches recent execution records sorted by timestamp descending.',
+        specs: [
+          ['Endpoint', '<code>GET /api/v1/jobs?department_id={id}&limit=10</code>'],
+          ['Fields', 'id, flow_name, squad_name, status, diff_count, created_at']
+        ],
+        audit: 'Pagination capped by SystemConfig max_dash_jobs.'
+      },
+      'f1-group': {
+        title: 'Client-Side Group by Date',
+        eyebrow: 'DASHBOARD STEP 1.3',
+        desc: 'Groups jobs chronologically into Today, Yesterday, or exact formatted calendar dates.',
+        specs: [
+          ['Component', 'Dashboard.jsx helper: groupJobsByDay()'],
+          ['UI', 'Collapsible day sections in left drawer']
+        ],
+        audit: 'Enhances test traceability for daily regression runs.'
+      },
+      'f1-select': {
+        title: 'Select Target Job ID',
+        eyebrow: 'DASHBOARD STEP 1.4',
+        desc: 'User clicks a specific job card to load its detailed diff comparison set.',
+        specs: [
+          ['State', 'selectedJob = job object'],
+          ['Trigger', 'Fetches /api/v1/jobs/{id}/results']
+        ],
+        audit: 'URL updated with ?job_id={id} for direct shareability.'
+      },
+      'f1-load': {
+        title: 'Mount Details Canvas',
+        eyebrow: 'DASHBOARD STEP 1.5',
+        desc: 'Initializes the main review canvas, rendering top metrics and comparison cards.',
+        specs: [
+          ['Stats', 'Total, Passed, Failed, Mismatched, Total Diff Points'],
+          ['Polling', 'Auto-polls status every 5s if job is QUEUED or PROCESSING']
+        ],
+        audit: 'Live SSE stream updates progress dynamically.'
+      },
+      'f2-images': {
+        title: 'Load Reference Master vs Run Image',
+        eyebrow: 'DIFF ENGINE STEP 2.1',
+        desc: 'Loads Device B (Reference Master) and Device A (Run Image) side-by-side.',
+        specs: [
+          ['Master Image', '<code>/output/jobs/{id}/device_b/{file}</code>'],
+          ['New Run Image', '<code>/output/jobs/{id}/device_a/{file}</code>']
+        ],
+        audit: 'Images served directly through Nginx/FastAPI media streaming.'
+      },
+      'f2-mask': {
+        title: 'Apply Red & Green Exclusion Masks',
+        eyebrow: 'DIFF ENGINE STEP 2.2',
+        desc: 'Mask coordinates retrieved from database are blanked out prior to pixel delta calculations.',
+        specs: [
+          ['Global Mask (Red)', 'Applies across all pages in flow (e.g. status bar clock)'],
+          ['Local Mask (Green)', 'Applies only to specified page_id (e.g. dynamic balance)']
+        ],
+        audit: 'Zero false positives on dynamic or time-sensitive screen regions.'
+      },
+      'f2-diffalgo': {
+        title: 'Diff Algorithm (Celery Worker)',
+        eyebrow: 'DIFF ENGINE STEP 2.3',
+        desc: 'Executes mathematical matrix difference and SSIM structural similarity scan.',
+        specs: [
+          ['Algorithms', 'NumPy absolute diff, OpenCV thresholding, findContours'],
+          ['Sensitivity', 'Governed by SystemConfig diff_threshold and tolerance']
+        ],
+        audit: 'Produces diff PNG with red highlight rectangles outlining variances.'
+      },
+      'f2-highlight': {
+        title: 'Status Classification & Diff Counts',
+        eyebrow: 'DIFF ENGINE STEP 2.4',
+        desc: 'Counts total diff points and categorizes each page as PASS, FAIL, or MISMATCH.',
+        specs: [
+          ['PASS', 'diff_points == 0'],
+          ['FAIL', 'diff_points > 0 with bounding contours'],
+          ['MISMATCH', 'Dimensions differ or missing matching screenshot']
+        ],
+        audit: 'Persisted to job_results table for permanent audit reporting.'
+      },
+      'f2-inspector': {
+        title: 'Interactive Diff Viewer & Keyboard Shortcuts',
+        eyebrow: 'DIFF ENGINE STEP 2.5',
+        desc: 'Interactive preview modal supporting pan, zoom, and quick diff switching.',
+        specs: [
+          ['Zoom Controls', '+ / - keys or mousewheel (0.5x to 2.5x)'],
+          ['Navigation', 'Left/Right arrow keys cycle through failed diffs only'],
+          ['Pan', 'Click and drag canvas coordinate origin']
+        ],
+        audit: 'Provides QA team fast, ergonomic verification inspection.'
+      },
+      'f3-review': {
+        title: 'Review Visual Differences',
+        eyebrow: 'HEALING STEP 3.1',
+        desc: 'QA engineer inspects whether visual discrepancies represent real bugs or expected UI enhancements.',
+        specs: [
+          ['Decision Point', 'Bug -> File Jira Ticket; Expected UI -> Update Master']
+        ],
+        audit: 'Human-in-the-loop review prevents unintended baseline corruption.'
+      },
+      'f3-trigger': {
+        title: 'Update Master Action',
+        eyebrow: 'HEALING STEP 3.2',
+        desc: 'User clicks "Update Master" on a specific page or "Update All Master Images".',
+        specs: [
+          ['Scope Options', 'Filename specific or "all" batch promotion'],
+          ['Confirmation', 'SweetAlert warning modal requiring explicit confirmation']
+        ],
+        audit: 'Requires authenticated write permissions.'
+      },
+      'f3-healapi': {
+        title: 'Atomic Master Healing Engine',
+        eyebrow: 'HEALING STEP 3.3',
+        desc: 'Backend mechanism invoked when user accepts visual changes, replacing baseline files.',
+        specs: [
+          ['API Endpoint', '<code>POST /api/v1/jobs/{id}/heal</code>'],
+          ['Request Body', '<code>{ "filename": "page1.png" | "all" }</code>'],
+          ['File Operation', 'shutil.copy2(new_img_path, master_path)']
+        ],
+        audit: 'Audit event BASELINE_HEALED recorded with job ID and healed count.'
+      },
+      'f3-note': {
+        title: 'Record Flow Note & Audit Justification',
+        eyebrow: 'HEALING STEP 3.4',
+        desc: 'SweetAlert modal prompts user to explain why master reference was changed.',
+        specs: [
+          ['Endpoint', '<code>PUT /api/v1/flows/{id}</code>'],
+          ['Content', 'Release version, change reason, or Jira ticket number']
+        ],
+        audit: 'Flow note displayed on dashboard to all team members.'
+      },
+      'f3-sse': {
+        title: 'Real-time Push Sync (page_image_changed)',
+        eyebrow: 'HEALING STEP 3.5',
+        desc: 'Broadcasts event over SSE so all open browser tabs refresh master thumbnails immediately.',
+        specs: [
+          ['Event', 'page_image_changed'],
+          ['Payload', '<code>{ "flow_id": 123 }</code>']
+        ],
+        audit: 'Ensures multi-user consistency without manual page reloads.'
+      },
+      'f4-click': {
+        title: 'Trigger Export PDF',
+        eyebrow: 'PDF STEP 4.1',
+        desc: 'User clicks "Export PDF" from the dashboard actions toolbar.',
+        specs: [
+          ['Prerequisite', 'Selected job has comparison results loaded'],
+          ['Feedback', 'Launches animated progress modal']
+        ],
+        audit: 'Client-side generation offloads server CPU.'
+      },
+      'f4-canvas': {
+        title: 'HTML5 Canvas DataURL Conversion',
+        eyebrow: 'PDF STEP 4.2',
+        desc: 'Asynchronously converts remote image URLs into high-resolution Base64 JPEG data.',
+        specs: [
+          ['Function', 'getImageDataUrl(url, maxWidth=600)'],
+          ['Progress Bar', 'Updates DOM progress indicator from 0% to 100%']
+        ],
+        audit: 'Cross-origin handling via Anonymous image mode.'
+      },
+      'f4-compile': {
+        title: 'Compile Multi-Page Landscape A4 (jsPDF)',
+        eyebrow: 'PDF STEP 4.3',
+        desc: 'Generates professional vector and bitmap pages formatted for corporate documentation.',
+        specs: [
+          ['Layout', 'Landscape A4 (297 x 210 mm)'],
+          ['Elements', 'Header banner, job metadata table, 3 side-by-side images per page']
+        ],
+        audit: 'Deterministic output ready for audit archive.'
+      },
+      'f4-download': {
+        title: 'Download Verification Report Artifact',
+        eyebrow: 'PDF STEP 4.4',
+        desc: 'Triggers browser file download: RobotVerify_Job_{id}_{flow}.pdf.',
+        specs: [
+          ['File Name', 'RobotVerify_Job_{id}_{flow}.pdf'],
+          ['Delivery', 'Direct browser blob download']
+        ],
+        audit: 'Includes pass/fail statistics, timestamp, and operator username.'
+      }
+    };
+
+    function showNodeDetail(nodeId) {
+      const drawer = document.getElementById('detail-drawer');
+      const item = nodeDatabase[nodeId] || {
+        title: nodeId.toUpperCase(),
+        eyebrow: 'COMPONENT DETAIL',
+        desc: 'Detailed operational specification for this architecture node.',
+        specs: [['Node ID', `<code>${nodeId}</code>`], ['Status', 'Active'], ['Access', 'Authenticated']],
+        audit: 'Standard audit logging enforced.'
+      };
+
+      document.getElementById('drawer-title').textContent = item.title;
+      document.getElementById('drawer-eyebrow').textContent = item.eyebrow;
+      document.getElementById('drawer-description').textContent = item.desc;
+      document.getElementById('drawer-audit-info').textContent = item.audit;
+
+      const tbody = document.getElementById('drawer-specs-body');
+      tbody.innerHTML = item.specs.map(([k, v]) => `
+        <tr>
+          <td style="width: 35%; font-weight: 500;">${k}</td>
+          <td>${v}</td>
+        </tr>
+      `).join('');
+
+      drawer.classList.add('active');
+    }
+
+    function closeDrawer() {
+      document.getElementById('detail-drawer').classList.remove('active');
+    }
+
+    function handleDrawerClick(e) {
+      if (e.target.id === 'detail-drawer') {
+        closeDrawer();
+      }
+    }
+
+    function resetZoom() {
+      const svg = document.querySelector('#svg-container svg');
+      if (svg) {
+        svg.style.transform = 'scale(1)';
+        svg.style.transformOrigin = 'top center';
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const drawer = document.getElementById('detail-drawer');
+        if (drawer.classList.contains('active')) {
+          closeDrawer();
+        } else if (currentView !== 'overview') {
+          switchView('overview');
+        }
+      }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      switchView('overview');
+    });
+  </script>
+</body>
+</html>

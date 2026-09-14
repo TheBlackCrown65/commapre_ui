@@ -1,0 +1,10 @@
+Export File Project
+python scripts/utils/export_for_security.py
+python scripts/utils/export_for_deployment.py
+
+Sonaqube scan
+docker run --rm `
+  -e SONAR_HOST_URL="http://host.docker.internal:9001" `
+  -e SONAR_TOKEN="sqp_f935bb41e8b2b6cab4cdee89fb8c775c8f817f27" `
+  -v "${PWD}:/usr/src" `
+  sonarsource/sonar-scanner-cli

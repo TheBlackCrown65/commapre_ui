@@ -1,0 +1,132 @@
+services:
+  # --- 1. Database (PostgreSQL) ---
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-robot_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robot_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-robot_verify_db}
+      TZ: Asia/Bangkok
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-robot_user} -d ${POSTGRES_DB:-robot_verify_db}" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    # 🔒 Security: ไม่ทำการ map ports เพื่อไม่ให้คนภายนอกเข้าถึง DB ได้โดยตรง
+
+    # --- 2. Message Broker (Redis) ---
+  redis:
+    image: redis:7-alpine
+    restart: always
+    environment:
+      TZ: Asia/Bangkok
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    # 🔒 Security: ไม่ทำการ map ports เช่นกัน ให้คุยกันแค่ภายใน Docker Network
+
+    # --- 3. Init Permissions (แก้ปัญหาโฟลเดอร์ output เขียนไม่ได้บนเครื่องใหม่) ---
+  init-permissions:
+    image: redis:7-alpine
+    volumes:
+      - ./output:/app/output
+    command: chown -R 1000:1000 /app/output
+
+  # --- 4. Backend API (FastAPI) ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "0:0"
+    volumes:
+      - ./output:/app/output:cached
+      - ./backend/app:/app/app:cached # Live Reload
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONPATH=/app
+      # อ่านค่าเชื่อมต่อจาก Environment Variables
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-robot_user}:${POSTGRES_PASSWORD:-robot_secure_password}@db:5432/${POSTGRES_DB:-robot_verify_db}
+      - REDIS_URL=redis://redis:6379/0
+      - TZ=Asia/Bangkok
+      # Security Variables
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
+      - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init-permissions:
+        condition: service_completed_successfully
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- 4. Background Worker (Celery) ---
+  # รันโค้ดชุดเดียวกับ Backend แต่ทำหน้าที่รับคิวงานจาก Redis ไปทำต่อ
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    user: "0:0"
+    volumes:
+      - ./output:/app/output:cached
+      - ./backend/app:/app/app:cached
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-robot_user}:${POSTGRES_PASSWORD:-robot_secure_password}@db:5432/${POSTGRES_DB:-robot_verify_db}
+      - REDIS_URL=redis://redis:6379/0
+      - TZ=Asia/Bangkok
+      # OpenCV & Numpy Multithreading Fix (Prevent CPU Thrashing with Celery)
+      - OPENCV_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      # Security Variables
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
+      - ADMIN_DEFAULT_PASSWORD=${ADMIN_DEFAULT_PASSWORD}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init-permissions:
+        condition: service_completed_successfully
+      backend:
+        condition: service_started
+    # 💡 เพิ่มบล็อกนี้เข้าไปเพื่อจำกัด CPU และ RAM
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: '8G'
+    # คำสั่งรัน Worker
+    command: python -m app.run_worker
+
+  # --- 5. Frontend (React/Nginx) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+    environment:
+      - TZ=Asia/Bangkok
+    ports:
+      - "9000:8080"
+    depends_on:
+      - backend
+    restart: always
+
+# ประกาศ Volume สำหรับเก็บข้อมูล Postgres ไม่ให้หายตอนปิด Container
+volumes:
+  pg_data:
