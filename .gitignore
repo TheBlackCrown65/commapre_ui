@@ -35,9 +35,24 @@ output/
 
 # Local Notes & Temporary Tokens
 note.txt
-sonar/note.txt
-sonar/txt
 txt
+
+# Local CI / CD
+Jenkinsfile
+
+# Skills & AI Customizations
+skills/
+
+# Local Testing / Load Testing Scripts
+tests/
+
+# Sonar Scanner Local Workspace
+sonar/
+
+# Temporary / Scratch Scripts & Diagrams
+scripts/archive/
+scripts/fixes/
+robot-verify-diagram.html
 
 # OS
 .DS_Store
