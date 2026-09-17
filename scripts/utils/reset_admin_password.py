@@ -20,7 +20,8 @@ def main():
             print("❌ Admin user not found!")
             return
 
-        new_password = "adminrobot"
+        import sys
+        new_password = sys.argv[1] if len(sys.argv) > 1 else os.getenv("ADMIN_NEW_PASSWORD", "admin")
         user.hashed_password = hash_password(new_password)
         db.commit()
         print(f"✅ Admin password has been reset to: {new_password}")

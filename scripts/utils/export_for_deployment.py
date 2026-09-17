@@ -52,6 +52,8 @@ def create_deployment_export():
         # Generated Files
         '*.zip',        # ป้องกันการ zip ตัวมันเอง
         '*.log',
+        'note.txt',
+        'txt',
     ]
 
     print(f"📦 กำลังแพ็คไฟล์โปรเจกต์ (Clean Version) ลงใน: {output_filename}")

@@ -45,6 +45,9 @@ def create_security_export():
         '.env',         # เราจะส่งไปแค่ .env.example
         '*.zip',        # ป้องกันการ zip ตัวมันเอง
         '*.log',
+        'note.txt',
+        'sonar*',
+        'txt',
     ]
 
     print(f"📦 กำลังแพ็คไฟล์โปรเจกต์ลงใน: {output_filename}")
