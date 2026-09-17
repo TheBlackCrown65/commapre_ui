@@ -166,10 +166,10 @@ try {
     # --------------------------------------------------------------------------
     Write-Step "4. สั่ง Sonar แสกนโค้ด (SonarScanner CLI)"
 
-    # อ่าน Token จากไฟล์ sonar/txt หรือใช้ Default Token
-    $SonarToken = "squ_370ce30fae5e2348b80cac132a132afe25aa7060"
+    # อ่าน Token จาก Environment Variable, ไฟล์ sonar/txt หรือให้ผู้ใช้กำหนด
+    $SonarToken = if ($env:SONAR_TOKEN) { $env:SONAR_TOKEN } else { "" }
     $TxtFile = Join-Path $SonarDir "txt"
-    if (Test-Path $TxtFile) {
+    if (-not $SonarToken -and (Test-Path $TxtFile)) {
         $tokenMatch = Get-Content $TxtFile | Where-Object { $_.Trim() -match "^sq[a-z0-9_]{30,}$" } | Select-Object -First 1
         if ($tokenMatch) {
             $SonarToken = $tokenMatch.Trim()

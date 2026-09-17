@@ -74,8 +74,8 @@ echo "[OK] SonarQube is UP!"
 
 # Step 4: Run Sonar Scanner
 echo -e "\n[4] Running SonarQube Scanner..."
-SONAR_TOKEN="squ_370ce30fae5e2348b80cac132a132afe25aa7060"
-if [ -f "${SONAR_DIR}/txt" ]; then
+SONAR_TOKEN="${SONAR_TOKEN:-}"
+if [ -z "$SONAR_TOKEN" ] && [ -f "${SONAR_DIR}/txt" ]; then
     FOUND_TOKEN=$(grep -E "^squ_[a-z0-9]+" "${SONAR_DIR}/txt" | head -n 1 || true)
     if [ -n "$FOUND_TOKEN" ]; then
         SONAR_TOKEN="$FOUND_TOKEN"
