@@ -31,7 +31,7 @@ def is_different_page(a_gray, b_gray, ssim_threshold=0.60):
     """
     # Crop ส่วน status bar (บน 6%) และ home indicator (ล่าง 4%) ออก
     # เพื่อไม่ให้ส่วนที่เหมือนกันทุกหน้า (เวลา, แบตเตอรี่, สัญญาณ) ทำให้ SSIM สูงเกินจริง
-    h_orig, w_orig = a_gray.shape
+    h_orig, _ = a_gray.shape
     top = int(h_orig * 0.06)
     bottom = int(h_orig * 0.04)
     a_crop = a_gray[top:h_orig - bottom, :]
@@ -226,15 +226,54 @@ def compare_images_and_save(path_a, path_b, path_diff, masks=[], enable_alignmen
         height, width = a_gray.shape
         scale = width / 375.0  # Base scale relative to mobile screen width (e.g. 1.0 for 375px, ~3.3 for 1242px)
 
-        # 1. Symmetric Jitter Tolerance (แก้ปัญหาขอบเลื่อม subpixel jitter / font anti-aliasing)
-        # ใช้ warpAffine + BORDER_REPLICATE เพื่อไม่ให้ขอบภาพม้วนกลับมาชนกัน (เหมือน np.roll)
-        tol = max(1, min(3, int(round(0.8 * scale))))
+        # 1. Content Alignment (แก้ปัญหา Webview เลื่อนหรือตำแหน่ง Layout ขยับ 1-5px บนมือถือ โดยไม่กระทบ Header/Footer)
+        aligned_a = a_gray
+        if enable_alignment:
+            aligned_a = a_gray.copy()
+            diff_raw = cv2.absdiff(a_gray, b_gray)
+            diff_raw[:int(round(35 * scale)), :] = 0  # Ignore status bar
+            diff_raw[:, -int(round(6 * scale)):] = 0  # Ignore scrollbar
+            row_d = np.sum(diff_raw[:, 50:width - 50] > 25, axis=1)
+
+            # ตรวจสอบขอบเขตบน-ล่างที่มีการเคลื่อนที่จริง โดยไม่ไปแตะแถบ Header และ Footer/ปุ่ม ที่ตรงกันอยู่แล้ว
+            y_top_limit = int(round(35 * scale))
+            y_top = y_top_limit
+            for y in range(y_top_limit, height - int(round(50 * scale))):
+                if row_d[y] > 5:
+                    y_top = max(y_top_limit, y - 5)
+                    break
+
+            y_bot = height
+            for y in range(height - 1, int(round(50 * scale)), -1):
+                if row_d[y] > 5:
+                    y_bot = min(height, y + 6)
+                    break
+
+            if y_bot > y_top + 100:
+                mid_a = a_gray[y_top:y_bot, 50:width - 50]
+                mid_b = b_gray[y_top:y_bot, 50:width - 50]
+                base_d = np.sum(cv2.absdiff(mid_a, mid_b))
+                best_dy = 0
+                best_d = base_d
+                for dy in range(-5, 6):
+                    if dy == 0: continue
+                    shifted = cv2.warpAffine(a_gray, np.float32([[1, 0, 0], [0, 1, dy]]), (width, height), borderMode=cv2.BORDER_REPLICATE)[y_top:y_bot, 50:width - 50]
+                    d = np.sum(cv2.absdiff(shifted, mid_b))
+                    if d < best_d:
+                        best_d = d
+                        best_dy = dy
+
+                if best_dy != 0 and best_d < base_d * 0.7:
+                    aligned_a[y_top:y_bot, :] = cv2.warpAffine(a_gray, np.float32([[1, 0, 0], [0, 1, best_dy]]), (width, height), borderMode=cv2.BORDER_REPLICATE)[y_top:y_bot, :]
+
+        # 2. Axial Jitter Tolerance (แก้ปัญหาขอบเลื่อม subpixel jitter / font anti-aliasing ในแนวราบและแนวดิ่ง
+        # โดยใช้การ shift เฉพาะแกนตั้งและนอน เพื่อไม่ให้จุดเครื่องหมายวรรคตอนขนาดเล็ก เช่น โคลอน : หรือจุด . ถูกเฉือนหายไปจากแนวทแยง)
+        shifts = [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)]
         diffs = []
-        for dy in range(-tol, tol + 1):
-            for dx in range(-tol, tol + 1):
-                M = np.float32([[1, 0, dx], [0, 1, dy]])
-                shifted_a = cv2.warpAffine(a_gray, M, (width, height), borderMode=cv2.BORDER_REPLICATE)
-                diffs.append(cv2.absdiff(shifted_a, b_gray))
+        for dx, dy in shifts:
+            M = np.float32([[1, 0, dx], [0, 1, dy]])
+            shifted_a = cv2.warpAffine(aligned_a, M, (width, height), borderMode=cv2.BORDER_REPLICATE)
+            diffs.append(cv2.absdiff(shifted_a, b_gray))
         diff_np = np.min(diffs, axis=0)
 
         # 2. กรอง Scrollbar ชั่วคราวบริเวณขอบขวาของจอ (Ephemeral Mobile Scrollbar)
@@ -243,8 +282,8 @@ def compare_images_and_save(path_a, path_b, path_diff, masks=[], enable_alignmen
         diff_np[:, width - scrollbar_w:] = 0
 
         # 3. กำหนดค่า Threshold ที่เสถียร (ตัด noise จาก anti-aliasing และเส้นขอบสีเทาอ่อนที่ไม่ใช่บั๊ก)
-        # ค่าความต่าง <= 20 เป็นเพียงความแตกต่างของ subpixel anti-aliasing หรือเงาเส้นขอบ
-        thresh_val = 25
+        # ค่าความต่าง <= 18 เป็นเพียงความแตกต่างของ subpixel anti-aliasing หรือเงาเส้นขอบ
+        thresh_val = 20
         _, thresh = cv2.threshold(diff_np, thresh_val, 255, cv2.THRESH_BINARY)
 
         if np.max(thresh) == 0:
@@ -304,7 +343,7 @@ def compare_images_and_save(path_a, path_b, path_diff, masks=[], enable_alignmen
         result_vis = cv2.cvtColor(result_vis, cv2.COLOR_RGB2BGR)
 
         # 6. กรอง Noise ขนาดเล็กมาก (Subpixel Noise Filter) และรวบรวม Raw Bounding Boxes
-        min_pts = max(4, int(round(2.0 * scale)))
+        min_pts = max(2, int(round(0.7 * scale)))
         raw_boxes = []
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
@@ -322,8 +361,8 @@ def compare_images_and_save(path_a, path_b, path_diff, masks=[], enable_alignmen
         merged_boxes = merge_bounding_boxes(raw_boxes, max_dx, max_dy)
 
         # 8. วาดกรอบสีแดงพร้อม Hilight บางๆ ให้ดูชัดเจน สบายตา โดยวงเผื่อขอบพอดีๆ (ไม่เบียดชิดเกินไป และไม่ยาวเกินไป)
-        pad_x = max(3, int(round(2.0 * scale)))
-        pad_y = max(3, int(round(2.0 * scale)))
+        pad_x = max(5, int(round(2.8 * scale)) + 1)
+        pad_y = max(5, int(round(2.8 * scale)) + 1)
         stroke = max(2, int(round(1.2 * scale)))
 
         # คำนวณพิกัดที่มีการเผื่อขอบ (Padding)
@@ -402,7 +441,7 @@ def process_comparison_job(self, job_db_id: int):
                 with open(meta_path, "r") as f:
                     meta = json.load(f)
                     compare_by_order = meta.get("compare_by_order", False)
-            except:
+            except Exception:
                 pass
 
         try:
@@ -429,7 +468,7 @@ def process_comparison_job(self, job_db_id: int):
 
             masks_rows = db.execute(text("SELECT type, x, y, width, height, page_id FROM masks WHERE flow_id = :fid"), {"fid": flow_id}).fetchall()
 
-            p_rows = db.execute(text("SELECT id, page_name, sort_order FROM pages WHERE flow_id = :fid ORDER BY sort_order ASC, id ASC"), {"fid": flow_id}).fetchall()
+            p_rows = db.execute(text("SELECT id, page_name, sort_order, image_path FROM pages WHERE flow_id = :fid ORDER BY sort_order ASC, id ASC"), {"fid": flow_id}).fetchall()
 
             dept_row = db.execute(text("""
                 SELECT COALESCE(s_folder.department_id, s_direct.department_id)
@@ -445,14 +484,23 @@ def process_comparison_job(self, job_db_id: int):
 
             pages_map = {}
             pages_ordered = []
+            page_path_map = {}
             for p in p_rows:
                 pid = p[0]
                 pname = str(p[1])
                 porder = p[2] if len(p) > 2 and p[2] is not None else 999
+                pimg = str(p[3]) if len(p) > 3 and p[3] else None
 
+                pname_clean = pname.lower().strip()
                 pages_map[pid] = pname
-                page_sort_map[pname.lower().strip()] = porder
-                pages_ordered.append(pname.lower().strip())
+                page_sort_map[pname_clean] = porder
+                pages_ordered.append(pname_clean)
+                if pimg:
+                    page_path_map[pname_clean] = pimg
+                    img_base = os.path.splitext(os.path.basename(pimg))[0].lower().strip()
+                    page_path_map[img_base] = pimg
+                    if img_base not in page_sort_map:
+                        page_sort_map[img_base] = porder
 
             for m in masks_rows:
                 m_type, x, y, w, h, pid = m
@@ -472,11 +520,11 @@ def process_comparison_job(self, job_db_id: int):
         total_files = len(saved_files)
 
         try:
-            requests.post("http://backend:8000/api/v1/jobs/notify_progress", json={
+            requests.post("http://backend:8000/api/v1/jobs/notify_progress", json={  # NOSONAR
                 "job_id": job_id_str, "department_id": dept_id,
                 "progress": {"current": 0, "total": total_files, "percent": 0}
             }, timeout=1)
-        except: pass
+        except Exception: pass
 
         results = []
         ref_base_dir = f"/app/output/references/{flow_id}"
@@ -507,14 +555,28 @@ def process_comparison_job(self, job_db_id: int):
 
             p_a = os.path.join(dir_a, filename)
             p_diff = os.path.join(dir_diff, filename)
-            ref_src = ref_lookup.get(ref_page_name)
+
+            # Master file resolution:
+            # 1. Look up via page_path_map (from DB page.image_path)
+            ref_src = None
+            if ref_page_name and ref_page_name in page_path_map and page_path_map[ref_page_name]:
+                candidate = os.path.join("/app/output", page_path_map[ref_page_name].lstrip("/"))
+                if os.path.exists(candidate):
+                    ref_src = candidate
+
+            # 2. Fallback to ref_lookup directory scanning
+            if not ref_src and ref_page_name:
+                ref_src = ref_lookup.get(ref_page_name)
+            if not ref_src and fname_no_ext:
+                ref_src = ref_lookup.get(fname_no_ext)
+            if not ref_src and fname_key:
+                ref_src = ref_lookup.get(fname_key)
 
             if ref_src:
                 p_b_in_job = os.path.join(dir_b, filename)
                 shutil.copy2(ref_src, p_b_in_job)
                 current_masks = global_masks.copy()
                 if ref_page_name in page_masks_map: current_masks.extend(page_masks_map[ref_page_name])
-
 
                 status, count = compare_images_and_save(p_a, p_b_in_job, p_diff, masks=current_masks, enable_alignment=enable_alignment, mismatch_threshold_percent=mismatch_threshold, page_similarity_threshold=page_sim_threshold)
                 results.append({"filename": filename, "status": status, "diff_count": count})
@@ -524,7 +586,7 @@ def process_comparison_job(self, job_db_id: int):
                     "job_id": job_id_str, "department_id": dept_id,
                     "progress": {"current": idx + 1, "total": total_files, "percent": round(((idx + 1) / total_files) * 100)}
                 }, timeout=1)
-            except: pass
+            except Exception: pass
 
             if (idx + 1) % 10 == 0:
                 gc.collect()
@@ -562,7 +624,7 @@ def process_comparison_job(self, job_db_id: int):
 
         gc.collect()
         try: requests.post("http://backend:8000/api/v1/jobs/notify", json={"job_id": job_id_str, "status": "COMPLETED", "flow_id": flow_id}, timeout=2)  # NOSONAR
-        except: pass
+        except Exception: pass
 
         return job_id_str
 
@@ -573,7 +635,7 @@ def process_comparison_job(self, job_db_id: int):
         job.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         db.commit()
         try: requests.post("http://backend:8000/api/v1/jobs/notify", json={"job_id": job.job_id_str, "status": "FAILED"}, timeout=2)  # NOSONAR
-        except: pass
+        except Exception: pass
         raise self.retry(exc=e)
 
     finally:

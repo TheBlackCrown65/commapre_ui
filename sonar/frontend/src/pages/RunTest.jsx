@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useMemo } from 'react';
-import client, { API_URL } from '../api/client';
-import { Play, Folder, Image as ImageIcon, CheckCircle, AlertCircle, Building2, Users, X, GripHorizontal } from 'lucide-react';
+import client from '../api/client';
+import { Play, Folder, Building2, Users, X, GripHorizontal } from 'lucide-react';
 import Swal from 'sweetalert2';
 import clsx from 'clsx';
 // 💡 1. Import ไลบรารี DND ระดับเทพแบบเดียวกับหน้า Settings
@@ -21,6 +21,59 @@ const ImagePreview = ({ file, alt, className }) => {
 
     return preview ? <img src={preview} alt={alt} className={className} draggable="false" /> : null;
 };
+
+function DraggableImageCard({ file, idx, compareByOrder, onRemove }) {
+    return (
+        <Draggable
+            key={file.webkitRelativePath || file.name}
+            draggableId={file.webkitRelativePath || file.name}
+            index={idx}
+            isDragDisabled={!compareByOrder}
+        >
+            {(provided, snapshot) => (
+                <div
+                    ref={provided.innerRef}
+                    {...provided.draggableProps}
+                    {...provided.dragHandleProps}
+                    className={clsx(
+                        "bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col hover:shadow-md transition-all group relative",
+                        compareByOrder ? "cursor-grab active:cursor-grabbing border-slate-200" : "border-slate-200",
+                        snapshot.isDragging && "shadow-2xl ring-4 ring-indigo-400/50 scale-105 rotate-2 z-50 border-indigo-500"
+                    )}
+                    style={provided.draggableProps.style}
+                >
+                    <div className="relative flex items-center justify-center bg-slate-100 p-2 min-h-[150px]">
+                        <ImagePreview
+                            file={file}
+                            alt={file.name}
+                            className="w-full h-auto max-h-[400px] object-contain rounded select-none pointer-events-none"
+                        />
+                        <div className="absolute top-2 left-2 z-10 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md pointer-events-none">
+                            {idx + 1}
+                        </div>
+
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRemove(file);
+                            }}
+                            className={clsx(
+                                "absolute top-2 right-2 z-10 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full shadow-md transition-opacity duration-200",
+                                snapshot.isDragging ? "opacity-0" : "opacity-0 group-hover:opacity-100"
+                            )}
+                            title="Remove this image"
+                        >
+                            <X size={14} strokeWidth={3} />
+                        </button>
+                    </div>
+                    <div className="bg-slate-800 text-white text-[11px] font-medium p-2 truncate text-center select-none" title={file.name}>
+                        {file.name}
+                    </div>
+                </div>
+            )}
+        </Draggable>
+    );
+}
 
 // Toast Mixin
 const Toast = Swal.mixin({
@@ -102,8 +155,8 @@ export default function RunTest() {
             return;
         }
 
-        const initialSorted = selected.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-        setFilesA(initialSorted);
+        selected.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        setFilesA(selected);
     };
 
     const handleRemoveImage = (fileToRemove) => {
@@ -184,8 +237,8 @@ export default function RunTest() {
                     if (pct >= 100) {
                         if (txt) txt.textContent = 'Comparing images... please wait';
                         Swal.update({ title: 'Comparing Images...' });
-                    } else {
-                        if (txt) txt.textContent = 'Uploading ' + pct + '%';
+                    } else if (txt) {
+                        txt.textContent = 'Uploading ' + pct + '%';
                     }
                 }
             });
@@ -197,7 +250,7 @@ export default function RunTest() {
                 timer: 2000,
                 showConfirmButton: false
             }).then(() => {
-                window.location.href = `/dashboard?job_id=${res.data.job_id}&department_id=${selectedDeptId}`;
+                globalThis.location.href = `/dashboard?job_id=${res.data.job_id}&department_id=${selectedDeptId}`;
             });
 
         } catch (err) {
@@ -255,57 +308,13 @@ export default function RunTest() {
                                     className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 items-start"
                                 >
                                     {files.map((file, idx) => (
-                                        <Draggable
+                                        <DraggableImageCard
                                             key={file.webkitRelativePath || file.name}
-                                            draggableId={file.webkitRelativePath || file.name}
-                                            index={idx}
-                                            isDragDisabled={!compareByOrder}
-                                        >
-                                            {(provided, snapshot) => (
-                                                <div
-                                                    ref={provided.innerRef}
-                                                    {...provided.draggableProps}
-                                                    {...provided.dragHandleProps}
-                                                    className={clsx(
-                                                        "bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col hover:shadow-md transition-all group relative",
-                                                        compareByOrder ? "cursor-grab active:cursor-grabbing border-slate-200" : "border-slate-200",
-                                                        // เอฟเฟกต์ตอนที่กำลังถูกลาก (ลอยขึ้นมาและเอียงนิดๆ เหมือนหน้า Settings)
-                                                        snapshot.isDragging && "shadow-2xl ring-4 ring-indigo-400/50 scale-105 rotate-2 z-50 border-indigo-500"
-                                                    )}
-                                                    style={provided.draggableProps.style}
-                                                >
-                                                    <div className="relative flex items-center justify-center bg-slate-100 p-2 min-h-[150px]">
-                                                        <ImagePreview
-                                                            file={file}
-                                                            alt={file.name}
-                                                            className="w-full h-auto max-h-[400px] object-contain rounded select-none pointer-events-none"
-                                                        />
-                                                        {/* ตัวเลขลำดับ จะอัปเดตตาม index ใหม่เสมอ */}
-                                                        <div className="absolute top-2 left-2 z-10 bg-blue-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md pointer-events-none">
-                                                            {idx + 1}
-                                                        </div>
-
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleRemoveImage(file);
-                                                            }}
-                                                            // ซ่อนปุ่ม X ตอนกำลังลาก เพื่อป้องกันเผลอกด
-                                                            className={clsx(
-                                                                "absolute top-2 right-2 z-10 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full shadow-md transition-opacity duration-200",
-                                                                snapshot.isDragging ? "opacity-0" : "opacity-0 group-hover:opacity-100"
-                                                            )}
-                                                            title="Remove this image"
-                                                        >
-                                                            <X size={14} strokeWidth={3} />
-                                                        </button>
-                                                    </div>
-                                                    <div className="bg-slate-800 text-white text-[11px] font-medium p-2 truncate text-center select-none" title={file.name}>
-                                                        {file.name}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </Draggable>
+                                            file={file}
+                                            idx={idx}
+                                            compareByOrder={compareByOrder}
+                                            onRemove={handleRemoveImage}
+                                        />
                                     ))}
                                     {provided.placeholder}
                                 </div>
@@ -317,19 +326,24 @@ export default function RunTest() {
         </div>
     );
 
+    let usersIconClass = "text-slate-300";
+    if (selectedDeptId) {
+        usersIconClass = selectedSquadId ? "text-violet-600" : "text-violet-600 animate-pulse";
+    }
+
     return (
         <div className="flex flex-col h-full gap-3 sm:gap-4 lg:gap-6">
             <div className="bg-white p-3 sm:p-4 lg:p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col gap-3 shrink-0">
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex-1 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                         <div className="flex items-center gap-1.5 p-1 rounded-lg shrink-0">
-                            <Building2 size={18} className={!selectedDeptId ? "text-blue-600 animate-pulse" : "text-blue-600"} />
+                            <Building2 size={18} className={selectedDeptId ? "text-blue-600" : "text-blue-600 animate-pulse"} />
                             <select
                                 className={clsx(
                                     "border-2 rounded-lg py-1.5 px-2.5 text-sm w-44 sm:w-56 h-10 transition-all outline-none cursor-pointer",
-                                    !selectedDeptId
-                                        ? "border-blue-500 bg-white text-blue-700 font-bold shadow-sm"
-                                        : "border-blue-500 bg-white text-blue-700 font-medium shadow-sm hover:border-blue-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                                    selectedDeptId
+                                        ? "border-blue-500 bg-white text-blue-700 font-medium shadow-sm hover:border-blue-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                                        : "border-blue-500 bg-white text-blue-700 font-bold shadow-sm"
                                 )}
                                 value={selectedDeptId}
                                 onChange={(e) => {
@@ -344,7 +358,7 @@ export default function RunTest() {
                         </div>
 
                         <div className="flex items-center gap-1.5 p-1 rounded-lg shrink-0">
-                            <Users size={18} className={!selectedDeptId ? "text-slate-300" : (selectedDeptId && !selectedSquadId) ? "text-violet-600 animate-pulse" : "text-violet-600"} />
+                            <Users size={18} className={usersIconClass} />
                             <select
                                 className={clsx(
                                     "border-2 rounded-lg py-1.5 px-2.5 text-sm w-44 sm:w-56 h-10 transition-all outline-none",
@@ -364,7 +378,7 @@ export default function RunTest() {
                         </div>
 
                         <div className="flex items-center gap-1.5 p-1 rounded-lg min-w-0 basis-[220px] grow max-w-full">
-                            <label htmlFor="flow-select" className={clsx("font-semibold text-sm whitespace-nowrap shrink-0", !selectedSquadId ? "text-slate-300" : "text-teal-600")}>Flow:</label>
+                            <label htmlFor="flow-select" className={clsx("font-semibold text-sm whitespace-nowrap shrink-0", selectedSquadId ? "text-teal-600" : "text-slate-300")}>Flow:</label>
                             <SearchableSelect
                                 disabled={!selectedSquadId}
                                 value={selectedFlow}
@@ -372,7 +386,7 @@ export default function RunTest() {
                                 placeholder="-- Choose Flow --"
                                 className={clsx(
                                     "w-fit max-w-full min-w-0",
-                                    !selectedFlow ? "w-44 sm:w-56" : "min-w-[160px]"
+                                    selectedFlow ? "min-w-[160px]" : "w-44 sm:w-56"
                                 )}
                                 options={[...flows].sort((a, b) => a.name.localeCompare(b.name)).map(f => ({ value: String(f.id), label: f.name }))}
                             />

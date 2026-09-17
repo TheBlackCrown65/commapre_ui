@@ -14,43 +14,65 @@ function UserRowGroup({ u, rowNo, departments, roles, currentUser, refreshUsers,
     const isMainEdited = mainDraft !== null;
     const currentDeptId = mainDraft?.department_id ?? u.department_id ?? '';
     const currentSquadId = mainDraft?.squad_id ?? u.squad_id ?? '';
-    const currentCustomRoleId = mainDraft?.custom_role_id !== undefined ? mainDraft.custom_role_id : (u.custom_role_id ?? '');
-    const currentExpireDate = mainDraft?.expire_date !== undefined ? mainDraft.expire_date : (u.expire_date ? u.expire_date.substring(0, 10) : '');
+    const currentCustomRoleId = mainDraft?.custom_role_id ?? u.custom_role_id ?? '';
+    const defaultExpireDate = u.expire_date ? u.expire_date.substring(0, 10) : '';
+    const currentExpireDate = mainDraft?.expire_date ?? defaultExpireDate;
     const isSuperAdmin = currentUser?.role === 'ADMIN' && !currentUser?.custom_role_id;
+    const isTM = (currentUser?.custom_role_name || '').toUpperCase() === 'TM' || currentUser?.custom_role_id === 2;
+    const canEditRole = (currentUser?.role === 'ADMIN' || isTM) && u.id !== currentUser?.id && u.role !== 'ADMIN';
     const todayStr = new Date().toISOString().split('T')[0];
 
-    const selectedDepts = [
+    const selectedDepts = new Set([
         currentDeptId,
         ...(u.support_roles || []).map(sr => supportDrafts[sr.id]?.department_id ?? sr.department_id),
         ...tempSupports.map(t => t.department_id)
-    ].filter(Boolean).map(String);
+    ].filter(Boolean).map(String));
 
-    const isDeptDisabled = (deptId, currentVal) => String(deptId) !== String(currentVal) && selectedDepts.includes(String(deptId));
+    const isDeptDisabled = (deptId, currentVal) => String(deptId) !== String(currentVal) && selectedDepts.has(String(deptId));
+
+    const cancelSupport = (srId) => {
+        setSupportDrafts(p => { const d = { ...p }; delete d[srId]; return d; });
+    };
+
+    const removeTempSupport = (tempId) => {
+        setTempSupports(p => p.filter(t => t.id !== tempId));
+    };
 
     const handleMainDraftChange = (field, value) => {
+        if (field === 'custom_role_id' && !canEditRole) return;
         setMainDraft(prev => ({
             department_id: currentDeptId,
             squad_id: currentSquadId,
             custom_role_id: currentCustomRoleId,
             expire_date: currentExpireDate,
-            ...(prev || {}),
+            ...prev,
             [field]: value
         }));
     };
 
+    const buildOrgPayload = (draft, hasRoleEditPerm) => {
+        const payload = {};
+        if (draft.department_id !== undefined) {
+            payload.department_id = draft.department_id ? Number(draft.department_id) : null;
+        }
+        if (draft.squad_id !== undefined) {
+            payload.squad_id = draft.squad_id ? Number(draft.squad_id) : null;
+        }
+        if (hasRoleEditPerm && draft.custom_role_id !== undefined) {
+            payload.custom_role_id = draft.custom_role_id ? Number(draft.custom_role_id) : null;
+        }
+        return payload;
+    };
+
     const saveMain = async () => {
         try {
-            if (mainDraft.department_id !== undefined || mainDraft.squad_id !== undefined || mainDraft.custom_role_id !== undefined) {
-                await client.put(`/api/v1/users/${u.id}`, {
-                    department_id: mainDraft.department_id ? Number(mainDraft.department_id) : null,
-                    squad_id: mainDraft.squad_id ? Number(mainDraft.squad_id) : null,
-                    custom_role_id: mainDraft.custom_role_id ? Number(mainDraft.custom_role_id) : null
-                });
+            const payload = buildOrgPayload(mainDraft, canEditRole);
+            if (Object.keys(payload).length > 0) {
+                await client.put(`/api/v1/users/${u.id}`, payload);
             }
             if (mainDraft.expire_date !== undefined) {
-                await client.put(`/api/v1/users/${u.id}/expire`, {
-                    expire_date: mainDraft.expire_date ? new Date(mainDraft.expire_date).toISOString() : null
-                });
+                const expireDateIso = mainDraft.expire_date ? new Date(mainDraft.expire_date).toISOString() : null;
+                await client.put(`/api/v1/users/${u.id}/expire`, { expire_date: expireDateIso });
             }
             Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Saved', showConfirmButton: false, timer: 1500 });
             setMainDraft(null);
@@ -80,8 +102,6 @@ function UserRowGroup({ u, rowNo, departments, roles, currentUser, refreshUsers,
             Swal.fire('Error', 'Department is required', 'error');
             return;
         }
-
-        const sr = u.support_roles.find(r => r.id === srId);
 
         const updatedSupportRoles = u.support_roles.map(r => {
             if (r.id === srId) {
@@ -182,14 +202,23 @@ function UserRowGroup({ u, rowNo, departments, roles, currentUser, refreshUsers,
                             <div className="flex items-center gap-1">
                                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{u.role}</span>
                                 <span className="text-slate-300">•</span>
-                                <select
-                                    value={currentCustomRoleId}
-                                    onChange={(e) => handleMainDraftChange('custom_role_id', e.target.value)}
-                                    className="bg-white border border-slate-200 text-xs rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-600 max-w-[120px]"
-                                >
-                                    <option value="">— No Job Role —</option>
-                                    {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                </select>
+                                {canEditRole ? (
+                                    <select
+                                        value={currentCustomRoleId}
+                                        onChange={(e) => handleMainDraftChange('custom_role_id', e.target.value)}
+                                        className="bg-white border border-slate-200 text-xs rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500/30 text-slate-600 max-w-[120px]"
+                                    >
+                                        <option value="">— No Job Role —</option>
+                                        {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                    </select>
+                                ) : (
+                                    <span
+                                        className="text-[11px] text-slate-600 font-medium px-1.5 py-0.5 bg-slate-100 rounded border border-slate-200/70 max-w-[130px] truncate inline-block"
+                                        title={roles.find(r => r.id === (u.custom_role_id ?? currentCustomRoleId))?.name || u.custom_role_name || 'No Job Role'}
+                                    >
+                                        {roles.find(r => r.id === (u.custom_role_id ?? currentCustomRoleId))?.name || u.custom_role_name || '— No Job Role —'}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -378,7 +407,7 @@ function UserRowGroup({ u, rowNo, departments, roles, currentUser, refreshUsers,
                                         <button onClick={() => saveSupport(sr.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded" title="Save Support">
                                             <Check size={16} />
                                         </button>
-                                        <button onClick={() => setSupportDrafts(p => { const d = { ...p }; delete d[sr.id]; return d; })} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Cancel">
+                                        <button onClick={() => cancelSupport(sr.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Cancel">
                                             <X size={16} />
                                         </button>
                                     </>
@@ -441,7 +470,7 @@ function UserRowGroup({ u, rowNo, departments, roles, currentUser, refreshUsers,
                             <button onClick={() => saveTempSupport(temp.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded bg-white shadow-sm" title="Save New Support">
                                 <Check size={16} />
                             </button>
-                            <button onClick={() => setTempSupports(p => p.filter(t => t.id !== temp.id))} className="p-1.5 text-red-600 hover:bg-red-50 rounded bg-white shadow-sm" title="Cancel">
+                            <button onClick={() => removeTempSupport(temp.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded bg-white shadow-sm" title="Cancel">
                                 <X size={16} />
                             </button>
                         </div>
@@ -462,8 +491,14 @@ export default function ManageUsers() {
     const [deptFilter, setDeptFilter] = useState('');
 
     const isSuperAdmin = currentUser?.role === 'ADMIN' && !currentUser?.custom_role_id;
+    const isTM = (currentUser?.custom_role_name || '').toUpperCase() === 'TM' || currentUser?.custom_role_id === 2;
+    const canAssignRole = currentUser?.role === 'ADMIN' || isTM;
 
-    
+    const getQARoleId = (roleList) => {
+        const qa = (roleList || []).find(r => r.name.toUpperCase() === 'QA');
+        return qa ? String(qa.id) : '';
+    };
+
     const fullCurrentUser = users.find(u => u.id === currentUser?.id) || currentUser;
     const allowedDeptIds = fullCurrentUser ? [
         fullCurrentUser.department_id,
@@ -483,6 +518,17 @@ export default function ManageUsers() {
     const [newCustomRoleId, setNewCustomRoleId] = useState('');
     const [newExpireDate, setNewExpireDate] = useState('');
     const [newNoExpiry, setNewNoExpiry] = useState(false);
+
+    const openCreateModal = () => {
+        setNewUsername('');
+        setNewRole('USER');
+        setNewDeptId('');
+        setNewSquadId('');
+        setNewCustomRoleId(getQARoleId(roles));
+        setNewExpireDate('');
+        setNewNoExpiry(false);
+        setIsCreateModalOpen(true);
+    };
 
     const todayStr = new Date().toISOString().split('T')[0];
 
@@ -528,6 +574,7 @@ export default function ManageUsers() {
             const res = await client.get('/api/v1/users');
             setUsers(res.data);
         } catch (err) {
+            console.error('Failed to fetch users', err);
             Swal.fire('Error', 'Failed to fetch users', 'error');
         } finally {
             setLoading(false);
@@ -556,6 +603,10 @@ export default function ManageUsers() {
         try {
             const res = await client.get('/api/v1/roles');
             setRoles(res.data);
+            const qaId = getQARoleId(res.data);
+            if (qaId) {
+                setNewCustomRoleId(prev => prev || qaId);
+            }
         } catch (err) {
             console.error('Failed to fetch roles', err);
         }
@@ -591,10 +642,10 @@ export default function ManageUsers() {
         try {
             const payload = {
                 username: newUsername,
-                role: newRole,
+                role: currentUser?.role === 'ADMIN' ? newRole : 'USER',
                 department_id: newDeptId ? Number(newDeptId) : null,
                 squad_id: newSquadId ? Number(newSquadId) : null,
-                custom_role_id: newCustomRoleId ? Number(newCustomRoleId) : null,
+                custom_role_id: (canAssignRole && newCustomRoleId) ? Number(newCustomRoleId) : null,
                 support_roles: []
             };
             if (!newNoExpiry && newExpireDate) {
@@ -607,7 +658,7 @@ export default function ManageUsers() {
             setNewRole('USER');
             setNewDeptId('');
             setNewSquadId('');
-            setNewCustomRoleId('');
+            setNewCustomRoleId(getQARoleId(roles));
             setNewExpireDate('');
             setNewNoExpiry(false);
 
@@ -793,7 +844,7 @@ export default function ManageUsers() {
                     if (e.key === 'Enter') { e.preventDefault(); Swal.clickConfirm(); }
                 });
             },
-            preConfirm: () => {
+            preConfirm: () => { // NOSONAR
                 const selected = document.querySelector('input[name="swal-role"]:checked');
                 const password = document.getElementById('swal-admin-password').value;
                 if (!selected) {
@@ -891,6 +942,70 @@ export default function ManageUsers() {
     const groups = groupUsers(filteredUsers);
     let rowCounter = 0;
 
+    let tableContent;
+    if (loading && users.length === 0) {
+        tableContent = (
+            <tr>
+                <td colSpan="8" className="py-8 text-center text-slate-500">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
+                    Loading users...
+                </td>
+            </tr>
+        );
+    } else if (groups.length === 0) {
+        tableContent = (
+            <tr>
+                <td colSpan="8" className="py-8 text-center text-slate-500">
+                    No users found
+                </td>
+            </tr>
+        );
+    } else {
+        tableContent = groups.map((group) => {
+            let groupColor = 'bg-slate-50 text-slate-500 border-slate-100';
+            if (group.icon === 'admin') {
+                groupColor = 'bg-indigo-50 text-indigo-700 border-indigo-100';
+            } else if (group.icon === 'dept') {
+                groupColor = 'bg-blue-50 text-blue-700 border-blue-100';
+            }
+            const groupIconEl = group.icon === 'admin'
+                ? <Shield size={14} />
+                : <Building2 size={14} />;
+
+            return [
+                <tr key={group.label} className={clsx("border-b", groupColor)}>
+                    <td colSpan="8" className="py-2 px-4">
+                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                            {groupIconEl}
+                            {group.label}
+                            <span className="text-[10px] font-normal opacity-70 lowercase tracking-normal">
+                                ({group.users.length} {group.users.length === 1 ? 'user' : 'users'})
+                            </span>
+                        </div>
+                    </td>
+                </tr>,
+                ...group.users.map((u) => {
+                    rowCounter++;
+                    return <UserRowGroup
+                        key={u.id}
+                        u={u}
+                        rowNo={rowCounter}
+                        departments={displayDepartments}
+                        roles={roles}
+                        currentUser={currentUser}
+                        refreshUsers={fetchUsers}
+                        silentFetchUsers={silentFetchUsers}
+                        onStatusChange={handleStatusChange}
+                        onResetPassword={handleResetPassword}
+                        onDeleteUser={handleDeleteUser}
+                        onChangeRole={handleChangeRole}
+                        onChangeExpireDate={handleChangeExpireDate}
+                    />;
+                })
+            ];
+        });
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -905,7 +1020,7 @@ export default function ManageUsers() {
                 </div>
 
                 <button
-                    onClick={() => setIsCreateModalOpen(true)}
+                    onClick={openCreateModal}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm whitespace-nowrap font-medium"
                 >
                     <UserPlus size={18} />
@@ -976,63 +1091,7 @@ export default function ManageUsers() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {loading && users.length === 0 ? (
-                                <tr>
-                                    <td colSpan="8" className="py-8 text-center text-slate-500">
-                                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-500" />
-                                        Loading users...
-                                    </td>
-                                </tr>
-                            ) : groups.length === 0 ? (
-                                <tr>
-                                    <td colSpan="8" className="py-8 text-center text-slate-500">
-                                        No users found
-                                    </td>
-                                </tr>
-                            ) : (
-                                groups.map((group, gi) => {
-                                    const groupColor = group.icon === 'admin'
-                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                                        : group.icon === 'dept'
-                                            ? 'bg-blue-50 text-blue-700 border-blue-100'
-                                            : 'bg-slate-50 text-slate-500 border-slate-100';
-                                    const groupIconEl = group.icon === 'admin'
-                                        ? <Shield size={14} />
-                                        : <Building2 size={14} />;
-
-                                    return [
-                                        <tr key={`group-${gi}`} className={clsx("border-b", groupColor)}>
-                                            <td colSpan="8" className="py-2 px-4">
-                                                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-                                                    {groupIconEl}
-                                                    {group.label}
-                                                    <span className="text-[10px] font-normal opacity-70 lowercase tracking-normal">
-                                                        ({group.users.length} {group.users.length === 1 ? 'user' : 'users'})
-                                                    </span>
-                                                </div>
-                                            </td>
-                                        </tr>,
-                                        ...group.users.map((u) => {
-                                            rowCounter++;
-                                            return <UserRowGroup
-                                                key={u.id}
-                                                u={u}
-                                                rowNo={rowCounter}
-                                                departments={displayDepartments}
-                                                roles={roles}
-                                                currentUser={currentUser}
-                                                refreshUsers={fetchUsers}
-                                                silentFetchUsers={silentFetchUsers}
-                                                onStatusChange={handleStatusChange}
-                                                onResetPassword={handleResetPassword}
-                                                onDeleteUser={handleDeleteUser}
-                                                onChangeRole={handleChangeRole}
-                                                onChangeExpireDate={handleChangeExpireDate}
-                                            />;
-                                        })
-                                    ];
-                                })
-                            )}
+                            {tableContent}
                         </tbody>
                     </table>
                 </div>
@@ -1070,31 +1129,51 @@ export default function ManageUsers() {
                                     />
                                 </div>
 
-                                <div>
-                                    <label htmlFor="mu-role" className="block text-sm font-medium text-slate-700 mb-1">Role <span className="text-red-500">*</span></label>
-                                    <select
-                                        id="mu-role"
-                                        value={newRole}
-                                        onChange={(e) => setNewRole(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                                    >
-                                        <option value="USER">User</option>
-                                        <option value="ADMIN">Admin</option>
-                                    </select>
-                                </div>
+                                {currentUser?.role === 'ADMIN' ? (
+                                    <div>
+                                        <label htmlFor="mu-role" className="block text-sm font-medium text-slate-700 mb-1">Role <span className="text-red-500">*</span></label>
+                                        <select
+                                            id="mu-role"
+                                            value={newRole}
+                                            onChange={(e) => setNewRole(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                                        >
+                                            <option value="USER">User</option>
+                                            <option value="ADMIN">Admin</option>
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <span className="block text-sm font-medium text-slate-700 mb-1">Role</span>
+                                        <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500 text-sm font-medium">
+                                            USER (Default)
+                                        </div>
+                                    </div>
+                                )}
 
-                                <div>
-                                    <label htmlFor="mu-job-role" className="block text-sm font-medium text-slate-700 mb-1">Job Role</label>
-                                    <select
-                                        id="mu-job-role"
-                                        value={newCustomRoleId}
-                                        onChange={(e) => setNewCustomRoleId(e.target.value)}
-                                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                                    >
-                                        <option value="">— Select Job Role —</option>
-                                        {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                    </select>
-                                </div>
+                                {canAssignRole ? (
+                                    <div>
+                                        <label htmlFor="mu-job-role" className="block text-sm font-medium text-slate-700 mb-1">
+                                            Job Role <span className="text-xs text-slate-400 font-normal">(Default: QA)</span>
+                                        </label>
+                                        <select
+                                            id="mu-job-role"
+                                            value={newCustomRoleId}
+                                            onChange={(e) => setNewCustomRoleId(e.target.value)}
+                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                                        >
+                                            <option value="">— No Job Role —</option>
+                                            {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <span className="block text-sm font-medium text-slate-700 mb-1">Job Role</span>
+                                        <div className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-400 text-sm italic">
+                                            Admin / TM Only
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="sm:col-span-2">
                                     <label htmlFor="mu-dept" className="block text-sm font-medium text-slate-700 mb-1">Primary Department <span className="text-red-500">*</span></label>

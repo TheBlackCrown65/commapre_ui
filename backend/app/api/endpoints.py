@@ -14,6 +14,8 @@ from typing import List, Optional, Annotated
 from datetime import datetime
 from PIL import Image
 from pydantic import BaseModel
+import cv2
+import numpy as np
 
 router = APIRouter()
 OUTPUT_DIR = "/app/output"
@@ -34,6 +36,11 @@ class FlowUpdate(BaseModel):
 
 class PageUpdate(BaseModel):
     page_name: str
+
+class SmartMaskDetectRequest(BaseModel):
+    page_id: int
+    x: int
+    y: int
 
 # --- Folders ---
 @router.get("/folders", response_model=List[FolderRead])
@@ -480,8 +487,8 @@ def create_page(flow_id: int = Form(...), page_name: str = Form(...), file: Uplo
             with Image.open(file_path) as img:
                 img_w, img_h = img.size
             if img_w > 0 and img_h > 0:
-                # คำนวณความสูงแถบ Status Bar บนสุด (~5.2% ของความสูง หรือ ~140px สำหรับจอ 1242x2688)
-                mask_h = max(50, int(round(img_h * 0.052)))
+                # คำนวณความสูงแถบ Status Bar บนสุด (~4.2% ของความสูง หรือ ~113px สำหรับจอ 1242x2688)
+                mask_h = max(40, int(round(img_h * 0.042)))
                 auto_mask = Mask(
                     flow_id=flow_id,
                     page_id=None,
@@ -719,20 +726,31 @@ def delete_mask(mask_id: int, request: Request, db: Session = Depends(get_db), c
     return {"status": "deleted"}
 
 @router.post("/masks/auto-global/{flow_id}")
-def generate_auto_global_mask(flow_id: int, request: Request, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    """สร้าง Red Mark (Global Mask) สำหรับแถบ Status Bar อัตโนมัติจากขนาดของหน้าแรกใน Flow"""
-    first_page = db.query(Page).filter(Page.flow_id == flow_id).order_by(Page.sort_order.asc(), Page.id.asc()).first()
-    if not first_page or not first_page.image_path:
-        raise HTTPException(status_code=400, detail="Flow has no pages to calculate mask size")
+def generate_auto_global_mask(
+    flow_id: int,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    page_id: Optional[int] = None
+):
+    """สร้าง Red Mark (Global Mask) สำหรับแถบ Status Bar อัตโนมัติ (4% ของความสูงจอ) จากขนาดของหน้า (หรือหน้าแรกใน Flow)"""
+    target_page = None
+    if page_id:
+        target_page = db.query(Page).filter(Page.id == page_id, Page.flow_id == flow_id).first()
+    if not target_page:
+        target_page = db.query(Page).filter(Page.flow_id == flow_id).order_by(Page.sort_order.asc(), Page.id.asc()).first()
 
-    abs_path = os.path.join(OUTPUT_DIR, first_page.image_path)
+    if not target_page or not target_page.image_path:
+        raise HTTPException(status_code=400, detail="Flow has no pages to calculate mask size")  # NOSONAR
+
+    abs_path = os.path.join(OUTPUT_DIR, target_page.image_path)
     if not os.path.exists(abs_path):
-        raise HTTPException(status_code=404, detail="Master image file not found")
+        raise HTTPException(status_code=404, detail="Master image file not found")  # NOSONAR
 
     with Image.open(abs_path) as img:
         img_w, img_h = img.size
 
-    mask_h = max(50, int(round(img_h * 0.052)))
+    mask_h = max(40, int(round(img_h * 0.04)))
 
     # อัปเดต Global Mask เดิมที่อยู่บนสุด (ถ้ามี) หรือสร้างใหม่
     existing_top_mask = db.query(Mask).filter(Mask.flow_id == flow_id, Mask.type == 'GLOBAL', Mask.y <= 10).first()
@@ -744,12 +762,118 @@ def generate_auto_global_mask(flow_id: int, request: Request, db: Session = Depe
         db.commit()
         db.refresh(existing_top_mask)
         return {"status": "updated", "id": existing_top_mask.id, "x": 0, "y": 0, "width": img_w, "height": mask_h}
+
+    new_mask = Mask(flow_id=flow_id, page_id=None, type='GLOBAL', x=0, y=0, width=img_w, height=mask_h)
+    db.add(new_mask)
+    db.commit()
+    db.refresh(new_mask)
+    return {"status": "created", "id": new_mask.id, "x": 0, "y": 0, "width": img_w, "height": mask_h}
+
+def _extract_text_box(roi, rel_x, rel_y, img_w, img_h, roi_x1, roi_x2, roi_y1, roi_y2, click_x, click_y):
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    border_pixels = np.concatenate([
+        thresh[0, :], thresh[-1, :], thresh[:, 0], thresh[:, -1]
+    ])
+    if np.mean(border_pixels) > 127:
+        thresh = cv2.bitwise_not(thresh)
+
+    vert_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 35))
+    vert_lines = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vert_kernel)
+    thresh_clean = cv2.subtract(thresh, vert_lines)
+    thresh_clean[:, :10] = 0
+    thresh_clean[:, -10:] = 0
+
+    kw = max(40, int(round(img_w * 0.038)))
+    kh = max(4, int(round(img_h * 0.003)))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
+    dilated = cv2.dilate(thresh_clean, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    best_box = None
+    min_dist = float('inf')
+
+    for cnt in contours:
+        bx, by, bw, bh = cv2.boundingRect(cnt)
+        if bw < 5 or bh < 5 or bw > (roi_x2 - roi_x1) * 0.98 or bh > (roi_y2 - roi_y1) * 0.85:
+            continue
+
+        inside = (bx <= rel_x <= bx + bw) and (by <= rel_y <= by + bh)
+        if inside:
+            best_box = (bx, by, bw, bh)
+            break
+        dx = max(bx - rel_x, 0, rel_x - (bx + bw))
+        dy = max(by - rel_y, 0, rel_y - (by + bh))
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist < 45 and dist < min_dist:
+            min_dist = dist
+            best_box = (bx, by, bw, bh)
+
+    if best_box:
+        bx, by, bw, bh = best_box
+        pad_x = max(6, int(round(img_w * 0.005)))
+        pad_y = max(8, int(round(img_h * 0.005)))
+        final_x = max(0, roi_x1 + bx - pad_x)
+        final_y = max(0, roi_y1 + by - pad_y)
+        final_w = min(img_w - final_x, bw + pad_x * 2)
+        final_h = min(img_h - final_y, bh + pad_y * 2)
     else:
-        new_mask = Mask(flow_id=flow_id, page_id=None, type='GLOBAL', x=0, y=0, width=img_w, height=mask_h)
-        db.add(new_mask)
-        db.commit()
-        db.refresh(new_mask)
-        return {"status": "created", "id": new_mask.id, "x": 0, "y": 0, "width": img_w, "height": mask_h}
+        def_w = max(80, int(round(img_w * 0.10)))
+        def_h = max(30, int(round(img_h * 0.02)))
+        final_x = max(0, click_x - def_w // 2)
+        final_y = max(0, click_y - def_h // 2)
+        final_w = min(img_w - final_x, def_w)
+        final_h = min(img_h - final_y, def_h)
+
+    return int(final_x), int(final_y), int(final_w), int(final_h)
+
+@router.post("/masks/detect-text")
+def detect_text_box(req: SmartMaskDetectRequest, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(get_current_user)]):
+    """ตรวจจับขอบเขตกลุ่มข้อความ/ตัวเลข (Word-level Bounding Box) ที่จุด (x, y) อัตโนมัติด้วย OpenCV"""
+    page = db.query(Page).filter(Page.id == req.page_id).first()
+    if not page or not page.image_path:
+        raise HTTPException(status_code=404, detail="Page or image not found")  # NOSONAR
+
+    abs_path = os.path.join(OUTPUT_DIR, page.image_path)
+    if not os.path.exists(abs_path):
+        raise HTTPException(status_code=404, detail="Master image file not found")  # NOSONAR
+
+    img = cv2.imread(abs_path)
+    if img is None:
+        raise HTTPException(status_code=400, detail="Failed to load image")  # NOSONAR
+
+    img_h, img_w = img.shape[:2]
+    click_x = max(0, min(img_w - 1, int(req.x)))
+    click_y = max(0, min(img_h - 1, int(req.y)))
+
+    # กำหนด Region of Interest (ROI) ในแนวตั้งรอบจุดคลิก
+    roi_h = max(300, int(round(img_h * 0.15)))
+    roi_y1 = max(0, click_y - roi_h // 2)
+    roi_y2 = min(img_h, click_y + roi_h // 2)
+    roi_x1 = 0
+    roi_x2 = img_w
+
+    roi = img[roi_y1:roi_y2, roi_x1:roi_x2]
+    if roi.size == 0:
+        raise HTTPException(status_code=400, detail="Invalid coordinates")  # NOSONAR
+
+    rel_x = click_x - roi_x1
+    rel_y = click_y - roi_y1
+
+    final_x, final_y, final_w, final_h = _extract_text_box(
+        roi, rel_x, rel_y, img_w, img_h, roi_x1, roi_x2, roi_y1, roi_y2, click_x, click_y
+    )
+
+    return {
+        "status": "ok",
+        "x": final_x,
+        "y": final_y,
+        "width": final_w,
+        "height": final_h
+    }
+
 
 # --- System Config ---
 @router.get("/config", response_model=List[SystemConfigRead])

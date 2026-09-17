@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react';
 import client, { API_URL } from '../api/client';
 import { Download, CheckCircle, AlertCircle, X, ZoomIn, ZoomOut, AlertTriangle, FileText, Calendar, Clock, PanelLeftOpen, PanelLeftClose, Trash2, RefreshCw, MessageSquare, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import Swal from 'sweetalert2';
 import clsx from 'clsx';
@@ -102,9 +101,9 @@ export default function Dashboard() {
         const handleKeyDown = (e) => {
             if (e.key === 'Escape') {
                 setPreviewComparison(null);
-            } else if (e.key === 'ArrowLeft' && currentDiffIndex > 0) {
+            } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && currentDiffIndex > 0) {
                 setPreviewComparison(diffItems[currentDiffIndex - 1]);
-            } else if (e.key === 'ArrowRight' && currentDiffIndex < diffItems.length - 1) {
+            } else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && currentDiffIndex < diffItems.length - 1) {
                 setPreviewComparison(diffItems[currentDiffIndex + 1]);
             } else if (e.key === '+' || e.key === '=') {
                 setCompZoom(z => Math.min(2.5, Number((z + 0.25).toFixed(2))));
@@ -203,10 +202,10 @@ export default function Dashboard() {
         eventSource.addEventListener('job_progress', (e) => {
             try {
                 const data = JSON.parse(e.data);
-                if (!selectedDeptId || String(data.department_id) === String(selectedDeptId)) {
+                if (data.job_id && data.progress) {
                     setJobProgress(prev => ({
                         ...prev,
-                        [data.job_id]: data.progress
+                        [String(data.job_id)]: data.progress
                     }));
                 }
             } catch { }
@@ -582,15 +581,57 @@ export default function Dashboard() {
             const margin = 10;
             const contentWidth = pageWidth - (margin * 2);
 
-            const summaryElement = document.getElementById('report-summary');
-            let firstPageY = margin;
-            if (summaryElement) {
-                const summaryCanvas = await html2canvas(summaryElement, { scale: 2, useCORS: true });
-                const summaryImgData = summaryCanvas.toDataURL('image/jpeg', 0.9);
-                const summaryHeight = (summaryCanvas.height * contentWidth) / summaryCanvas.width;
-                pdf.addImage(summaryImgData, 'JPEG', margin, margin, contentWidth, summaryHeight);
-                firstPageY += summaryHeight;
-            }
+            // Draw Summary Cards natively in jsPDF (consistent vector layout across all screen aspect ratios 16:9 / 16:10)
+            const cardGap = 5;
+            const cardWidth = (contentWidth - (cardGap * 2)) / 3;
+            const cardHeight = 26;
+            const cardY = margin + 2;
+
+            const drawSummaryCard = (x, value, label, subtext, valueColor, subtextColor) => {
+                pdf.setFillColor(255, 255, 255);
+                pdf.setDrawColor(226, 232, 240); // slate-200
+                pdf.roundedRect(x, cardY, cardWidth, cardHeight, 2, 2, 'FD');
+
+                const centerX = x + cardWidth / 2;
+
+                if (subtext) {
+                    // 3 lines: perfectly distributed vertically
+                    pdf.setFontSize(20);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(...valueColor);
+                    pdf.text(String(value), centerX, cardY + 9.5, { align: 'center' });
+
+                    pdf.setFontSize(8.5);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(148, 163, 184); // slate-400
+                    pdf.text(label.toUpperCase(), centerX, cardY + 16, { align: 'center' });
+
+                    pdf.setFontSize(7);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(...subtextColor);
+                    pdf.text(subtext, centerX, cardY + 21.5, { align: 'center' });
+                } else {
+                    // 2 lines: perfectly centered vertically in the 26mm card
+                    pdf.setFontSize(22);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(...valueColor);
+                    pdf.text(String(value), centerX, cardY + 12.5, { align: 'center' });
+
+                    pdf.setFontSize(8.5);
+                    pdf.setFont(undefined, 'bold');
+                    pdf.setTextColor(148, 163, 184); // slate-400
+                    pdf.text(label.toUpperCase(), centerX, cardY + 19, { align: 'center' });
+                }
+            };
+
+            drawSummaryCard(margin, stats.total, "Total Files", null, [30, 41, 59]); // slate-800
+            drawSummaryCard(margin + cardWidth + cardGap, stats.passed, "Passed", null, [22, 163, 74]); // green-600
+
+            const diffColor = stats.totalDiffPoints > 0 ? [220, 38, 38] : [37, 99, 235];
+            const subtext = (stats.failed > 0 || stats.mismatched > 0) ? `(from ${stats.failed} failed, ${stats.mismatched} mismatched)` : null;
+            drawSummaryCard(margin + (cardWidth + cardGap) * 2, stats.totalDiffPoints, "Total Diff Points", subtext, diffColor, [239, 68, 68]);
+
+            let firstPageY = cardY + cardHeight + 8;
 
             // Draw Flow Name in the empty space
             const reportTitle = selectedJob.flow_name || 'Test Report';
@@ -901,11 +942,6 @@ export default function Dashboard() {
                                 setCompZoom(newZoom);
                             }}
                         >
-                            {/* Floating subtle hint */}
-                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-none z-10 text-[11px] font-medium text-slate-500 bg-white/80 backdrop-blur px-3 py-1 rounded-full shadow-sm border border-slate-200/60">
-                                Scroll to Zoom • Drag to Move • Click to Close
-                            </div>
-
                             {/* Scaled & Panned 3-Image Container */}
                             <div
                                 style={{
@@ -913,49 +949,46 @@ export default function Dashboard() {
                                     transition: compDragging ? 'none' : 'transform 0.1s ease-out',
                                     transformOrigin: 'center center',
                                 }}
-                                className="w-full max-w-[1700px] px-4 pointer-events-none select-none"
+                                className="pointer-events-none select-none flex justify-center items-center w-full px-1"
                             >
-                                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 lg:gap-3">
-                                    {/* Column 1: Reference (Master) */}
-                                    <div className="flex flex-col gap-3 sm:gap-3.5">
-                                        <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-blue-600 py-1.5 px-3 rounded-lg shadow-sm border border-blue-700">
-                                            Reference (Master)
-                                        </div>
-                                        <div className="bg-white rounded-xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex items-center justify-center min-h-[420px] lg:min-h-[580px]">
+                                {/* Unified Single Board Background */}
+                                <div className="bg-slate-100/95 rounded-2xl p-2 sm:p-2.5 border border-slate-200/80 shadow-md inline-flex flex-col items-center mx-auto">
+                                    <div className="inline-flex items-start justify-center gap-1.5 sm:gap-2">
+                                        {/* Column 1: Reference (Master) */}
+                                        <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                            <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-blue-600 py-1 px-3 rounded-lg shadow-sm border border-blue-700 w-full">
+                                                Reference (Master)
+                                            </div>
                                             <img
                                                 src={previewComparison.b_img}
                                                 alt="Reference (Master)"
-                                                className="max-h-[68vh] w-auto max-w-full object-contain rounded"
+                                                className="max-h-[82vh] w-auto max-w-[32vw] object-contain rounded-lg border border-slate-900 shadow-sm bg-white"
                                                 draggable="false"
                                             />
                                         </div>
-                                    </div>
 
-                                    {/* Column 2: New Image */}
-                                    <div className="flex flex-col gap-3 sm:gap-3.5">
-                                        <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-purple-600 py-1.5 px-3 rounded-lg shadow-sm border border-purple-700">
-                                            New Image
-                                        </div>
-                                        <div className="bg-white rounded-xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex items-center justify-center min-h-[420px] lg:min-h-[580px]">
+                                        {/* Column 2: New Image */}
+                                        <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                            <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-purple-600 py-1 px-3 rounded-lg shadow-sm border border-purple-700 w-full">
+                                                New Image
+                                            </div>
                                             <img
                                                 src={previewComparison.a_img}
                                                 alt="New Version"
-                                                className="max-h-[68vh] w-auto max-w-full object-contain rounded"
+                                                className="max-h-[82vh] w-auto max-w-[32vw] object-contain rounded-lg border border-slate-900 shadow-sm bg-white"
                                                 draggable="false"
                                             />
                                         </div>
-                                    </div>
 
-                                    {/* Column 3: Difference */}
-                                    <div className="flex flex-col gap-3 sm:gap-3.5">
-                                        <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-red-600 py-1.5 px-3 rounded-lg shadow-sm border border-red-700">
-                                            Difference
-                                        </div>
-                                        <div className="bg-white rounded-xl p-1.5 sm:p-2 border border-slate-200 shadow-sm flex items-center justify-center min-h-[420px] lg:min-h-[580px]">
+                                        {/* Column 3: Difference */}
+                                        <div className="flex flex-col items-center gap-1.5 shrink-0">
+                                            <div className="text-xs font-bold text-white uppercase tracking-wider text-center bg-red-600 py-1 px-3 rounded-lg shadow-sm border border-red-700 w-full">
+                                                Difference
+                                            </div>
                                             <img
                                                 src={previewComparison.diff_img}
                                                 alt="Difference"
-                                                className="max-h-[68vh] w-auto max-w-full object-contain rounded"
+                                                className="max-h-[82vh] w-auto max-w-[32vw] object-contain rounded-lg border border-slate-900 shadow-sm bg-white"
                                                 draggable="false"
                                             />
                                         </div>
@@ -1041,7 +1074,7 @@ export default function Dashboard() {
                                 transformOrigin: 'center center',
                                 pointerEvents: 'auto'
                             }}
-                            className="max-w-full max-h-full object-contain rounded-lg select-none"
+                            className="max-w-full max-h-full object-contain rounded-lg border border-white/20 shadow-2xl select-none"
                             draggable="false"
                         />
                     </div>
@@ -1156,19 +1189,26 @@ export default function Dashboard() {
                                             {job.created_at ? formatTime(job.created_at) : 'Latest run'}
                                         </div>
 
-                                        {(job.status === 'QUEUED' || job.status === 'PROCESSING') && jobProgress[job.job_id_str || job.id] && (
-                                            <div className="flex items-center gap-2 w-32">
-                                                <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-amber-400 bg-stripes animate-stripes transition-all duration-300"
-                                                        style={{ width: `${jobProgress[job.job_id_str || job.id].percent}%` }}
-                                                    ></div>
+                                        {(job.status === 'QUEUED' || job.status === 'PROCESSING') && (() => {
+                                            const pData = jobProgress[String(job.job_id_str || job.id)] || jobProgress[String(job.id)];
+                                            const pct = pData?.percent ?? 0;
+                                            return (
+                                                <div className="flex items-center gap-2 w-36 sm:w-40">
+                                                    <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={clsx(
+                                                                "h-full bg-amber-400 transition-all duration-300",
+                                                                pct === 0 ? "w-1/3 animate-pulse" : "bg-stripes animate-stripes"
+                                                            )}
+                                                            style={{ width: pct > 0 ? `${pct}%` : undefined }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-amber-600 w-7 text-right shrink-0">
+                                                        {pct}%
+                                                    </span>
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-500 w-6 text-right shrink-0">
-                                                    {jobProgress[job.job_id_str || job.id].percent}%
-                                                </span>
-                                            </div>
-                                        )}
+                                            );
+                                        })()}
                                     </div>
                                 </div>
                             ))}
@@ -1276,21 +1316,21 @@ export default function Dashboard() {
 
                                     <div id="report-summary">
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-6 lg:mb-8">
-                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 text-center">
-                                                <div className="text-3xl font-bold text-slate-800 mb-1">{stats.total}</div>
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Files</div>
+                                            <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-sm border border-slate-200 text-center flex flex-col justify-center min-h-[96px] sm:min-h-[115px]">
+                                                <div className="text-2xl sm:text-3xl font-bold text-slate-800 mb-1">{stats.total}</div>
+                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider leading-normal">Total Files</div>
                                             </div>
-                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 text-center">
-                                                <div className="text-3xl font-bold text-green-600 mb-1">{stats.passed}</div>
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Passed</div>
+                                            <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-sm border border-slate-200 text-center flex flex-col justify-center min-h-[96px] sm:min-h-[115px]">
+                                                <div className="text-2xl sm:text-3xl font-bold text-green-600 mb-1">{stats.passed}</div>
+                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider leading-normal">Passed</div>
                                             </div>
-                                            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 text-center">
-                                                <div className={clsx("text-3xl font-bold mb-1", stats.totalDiffPoints > 0 ? "text-red-600" : "text-blue-600")}>
+                                            <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-sm border border-slate-200 text-center flex flex-col justify-center min-h-[96px] sm:min-h-[115px]">
+                                                <div className={clsx("text-2xl sm:text-3xl font-bold mb-1", stats.totalDiffPoints > 0 ? "text-red-600" : "text-blue-600")}>
                                                     {stats.totalDiffPoints}
                                                 </div>
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Diff Points</div>
+                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider leading-normal">Total Diff Points</div>
                                                 {(stats.failed > 0 || stats.mismatched > 0) && (
-                                                    <div className="text-xs font-bold text-red-500 mt-1">
+                                                    <div className="text-[11px] sm:text-xs font-bold text-red-500 mt-1 leading-normal">
                                                         (from {stats.failed} failed, {stats.mismatched} mismatched)
                                                     </div>
                                                 )}

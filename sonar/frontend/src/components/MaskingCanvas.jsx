@@ -9,6 +9,7 @@ export default function MaskingCanvas({
     onMaskAdd,
     onMaskUpdate,
     onMaskDelete,
+    onSmartDetect,
     mode = 'GLOBAL'
 }) {
     const containerRef = useRef(null);
@@ -29,6 +30,7 @@ export default function MaskingCanvas({
     const [showZoom, setShowZoom] = useState(false);
     const [previewRect, setPreviewRect] = useState({ top: 0, left: 0 });
     const [imgLoading, setImgLoading] = useState(true);
+    const [detectPulsePos, setDetectPulsePos] = useState(null);
 
     useEffect(() => {
         setImgLoading(true);
@@ -280,6 +282,28 @@ export default function MaskingCanvas({
         handleMouseMove(e);
     };
 
+    const handleDoubleClick = async (e) => {
+        if (mode !== 'PAGE' || !onSmartDetect) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        setIsDrawing(false);
+        setCurrentRect(null);
+
+        const pos = getRelativePos(e);
+        const naturalX = Math.round(pos.x * scale.x);
+        const naturalY = Math.round(pos.y * scale.y);
+
+        setDetectPulsePos({ x: pos.x, y: pos.y });
+        try {
+            await onSmartDetect({ x: naturalX, y: naturalY });
+        } catch (err) {
+            console.error("Smart detect error:", err);
+        } finally {
+            setTimeout(() => setDetectPulsePos(null), 500);
+        }
+    };
+
     const handleWheel = () => {
         // After scroll, recalc mousePos using stored client coords since image rect shifts
         requestAnimationFrame(() => {
@@ -311,8 +335,21 @@ export default function MaskingCanvas({
             onMouseDown={handleMouseDown} // NOSONAR
             onMouseMove={handleMouseMoveWrapped} // NOSONAR
             onMouseUp={handleMouseUp} // NOSONAR
+            onDoubleClick={handleDoubleClick} // NOSONAR
             onWheel={handleWheel} // NOSONAR
         >
+            {detectPulsePos && (
+                <div
+                    className="absolute pointer-events-none rounded-full border-2 border-blue-500 bg-blue-400/30 animate-ping z-40"
+                    style={{
+                        left: detectPulsePos.x - 16,
+                        top: detectPulsePos.y - 16,
+                        width: 32,
+                        height: 32,
+                    }}
+                />
+            )}
+
             {imgLoading && (
                 <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
                     <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4" />

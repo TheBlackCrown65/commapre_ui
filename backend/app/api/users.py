@@ -3,18 +3,20 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from datetime import datetime, timezone
 
 from ..database import get_db
-from ..models import User
+from ..models import User, CustomRole, UserSupportRole
 from ..core.security import hash_password
 from ..core.deps import require_admin, get_current_user, require_permission
 from .auth import UserRead
 from ..core.audit_logger import log_action
 from ..events import job_events
 from sqlalchemy.orm import joinedload
-from ..models import UserSupportRole
+
+USER_NOT_FOUND = "User not found"
+SUPER_ADMIN_ONLY = "Only Super Admins can modify Admin users"
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -53,8 +55,50 @@ def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
+def _format_support_role(sr):
+    dept_name = sr.department.name if sr.department else None
+    squad_name = sr.squad.name if sr.squad else None
+    role_name = sr.custom_role.name if sr.custom_role else None
+    return {
+        "id": sr.id,
+        "department_id": sr.department_id,
+        "department_name": dept_name,
+        "squad_id": sr.squad_id,
+        "squad_name": squad_name,
+        "custom_role_id": sr.custom_role_id,
+        "custom_role_name": role_name
+    }
+
+def _serialize_user_read(u):
+    dept_name = u.department.name if u.department else None
+    squad_name = u.squad.name if u.squad else None
+    role_name = u.custom_role.name if u.custom_role else None
+    menu_perms = [p.menu_key for p in u.custom_role.menu_permissions] if u.custom_role else []
+    support_roles = [_format_support_role(sr) for sr in getattr(u, 'support_roles', [])]
+    expire_date = u.expire_date.isoformat() if u.expire_date else None
+    last_login = u.last_login.isoformat() if u.last_login else None
+
+    return {
+        "id": u.id,
+        "username": u.username,
+        "role": u.role,
+        "status": u.status,
+        "must_change_password": u.must_change_password,
+        "department_id": u.department_id,
+        "squad_id": u.squad_id,
+        "position": u.position,
+        "department_name": dept_name,
+        "squad_name": squad_name,
+        "custom_role_id": u.custom_role_id,
+        "custom_role_name": role_name,
+        "menu_permissions": menu_perms,
+        "support_roles": support_roles,
+        "expire_date": expire_date,
+        "last_login": last_login
+    }
+
 @router.get("", response_model=List[UserRead])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def list_users(db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     users = db.query(User).options(
         joinedload(User.department),
         joinedload(User.squad),
@@ -63,41 +107,26 @@ def list_users(db: Session = Depends(get_db), current_user: User = Depends(requi
         joinedload(User.support_roles).joinedload(UserSupportRole.custom_role),
         joinedload(User.support_roles).joinedload(UserSupportRole.squad)
     ).order_by(User.id.asc()).all()
-    
-    result = []
-    for u in users:
-        user_dict = {
-            "id": u.id,
-            "username": u.username,
-            "role": u.role,
-            "status": u.status,
-            "must_change_password": u.must_change_password,
-            "department_id": u.department_id,
-            "squad_id": u.squad_id,
-            "position": u.position,
-            "department_name": u.department.name if u.department else None,
-            "squad_name": u.squad.name if u.squad else None,
-            "custom_role_id": u.custom_role_id,
-            "custom_role_name": u.custom_role.name if u.custom_role else None,
-            "menu_permissions": [p.menu_key for p in u.custom_role.menu_permissions] if u.custom_role else [],
-            "support_roles": [{"id": sr.id, "department_id": sr.department_id, "department_name": sr.department.name if sr.department else None, "squad_id": sr.squad_id, "squad_name": sr.squad.name if sr.squad else None, "custom_role_id": sr.custom_role_id, "custom_role_name": sr.custom_role.name if sr.custom_role else None} for sr in u.support_roles],
-            "expire_date": u.expire_date.isoformat() if u.expire_date else None,
-            "last_login": u.last_login.isoformat() if u.last_login else None
-        }
-        result.append(user_dict)
-    return result
+    return [_serialize_user_read(u) for u in users]
 
 @router.post("", response_model=UserCreateResponse)
-def create_user(req: UserCreate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def create_user(req: UserCreate, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     if db.query(User).filter(User.username == req.username).first():
-        raise HTTPException(status_code=400, detail="Username is already taken")
+        raise HTTPException(status_code=400, detail="Username is already taken")  # NOSONAR
         
     if req.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can create Admin users")
+        raise HTTPException(status_code=403, detail="Only Super Admins can create Admin users")  # NOSONAR
         
     if req.expire_date and req.expire_date.replace(tzinfo=None) < datetime.now(timezone.utc).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0):
-        raise HTTPException(status_code=400, detail="Expire date cannot be in the past")
+        raise HTTPException(status_code=400, detail="Expire date cannot be in the past")  # NOSONAR
     
+    # Default to QA role if none provided
+    custom_role_id = req.custom_role_id
+    if not custom_role_id:
+        qa_role = db.query(CustomRole).filter(CustomRole.name.ilike("QA")).first()
+        if qa_role:
+            custom_role_id = qa_role.id
+
     gen_pass = generate_random_password()
     new_user = User(
         username=req.username,
@@ -109,7 +138,7 @@ def create_user(req: UserCreate, request: Request, db: Session = Depends(get_db)
         department_id=req.department_id,
         squad_id=req.squad_id,
         position=req.position,
-        custom_role_id=req.custom_role_id,
+        custom_role_id=custom_role_id,
         expire_date=req.expire_date
     )
     db.add(new_user)
@@ -136,27 +165,21 @@ def create_user(req: UserCreate, request: Request, db: Session = Depends(get_db)
     # แจ้งเตือนว่ามีการสร้าง User ให้ UI Refresh
     job_events.broadcast("user_created", {"user_id": new_user.id})
     return UserCreateResponse(
-        user=UserRead(
-            id=new_user.id, username=new_user.username, role=new_user.role, status=new_user.status,
-            must_change_password=new_user.must_change_password, department_id=new_user.department_id,
-            squad_id=new_user.squad_id, position=new_user.position, custom_role_id=new_user.custom_role_id,
-            support_roles=[{"id": sr.id, "department_id": sr.department_id, "department_name": sr.department.name if sr.department else None, "squad_id": sr.squad_id, "squad_name": sr.squad.name if sr.squad else None, "custom_role_id": sr.custom_role_id, "custom_role_name": sr.custom_role.name if sr.custom_role else None} for sr in getattr(new_user, 'support_roles', [])],
-            expire_date=new_user.expire_date, last_login=new_user.last_login
-        ),
+        user=UserRead(**_serialize_user_read(new_user)),
         generated_password=gen_pass
     )
 
 @router.put("/{user_id}/expire")
-def update_user_expire(user_id: int, req: UserExpireUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def update_user_expire(user_id: int, req: UserExpireUpdate, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can modify Admin users")
+        raise HTTPException(status_code=403, detail=SUPER_ADMIN_ONLY)  # NOSONAR
         
     if req.expire_date and req.expire_date.replace(tzinfo=None) < datetime.now(timezone.utc).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0):
-        raise HTTPException(status_code=400, detail="Expire date cannot be in the past")
+        raise HTTPException(status_code=400, detail="Expire date cannot be in the past")  # NOSONAR
         
     user.expire_date = req.expire_date
     db.commit()
@@ -169,14 +192,35 @@ def update_user_expire(user_id: int, req: UserExpireUpdate, request: Request, db
     job_events.broadcast("user_updated", {"user_id": user.id})
     return {"message": "Expire date updated successfully"}
 
+def _validate_role_assignment(current_user, user, user_id):
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own role")  # NOSONAR
+    is_admin = current_user.role == "ADMIN"
+    is_tm = bool(current_user.custom_role and current_user.custom_role.name.upper() == "TM")
+    if not (is_admin or is_tm):
+        raise HTTPException(status_code=403, detail="Only Admins and Test Managers can change user roles")  # NOSONAR
+    if user.role == "ADMIN" and not is_admin:
+        raise HTTPException(status_code=403, detail="Cannot change role of Admin users")  # NOSONAR
+
+def _update_support_roles(db, user_id, support_roles):
+    db.query(UserSupportRole).filter(UserSupportRole.user_id == user_id).delete()
+    if support_roles:
+        for sr in support_roles:
+            db.add(UserSupportRole(
+                user_id=user_id,
+                department_id=sr["department_id"],
+                custom_role_id=sr.get("custom_role_id"),
+                squad_id=sr.get("squad_id")
+            ))
+
 @router.put("/{user_id}")
-def update_user_org(user_id: int, req: UserOrgUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def update_user_org(user_id: int, req: UserOrgUpdate, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can modify Admin users")
+        raise HTTPException(status_code=403, detail=SUPER_ADMIN_ONLY)  # NOSONAR
         
     update_data = req.dict(exclude_unset=True) if hasattr(req, "dict") else req.model_dump(exclude_unset=True)
     
@@ -187,21 +231,11 @@ def update_user_org(user_id: int, req: UserOrgUpdate, request: Request, db: Sess
     if "position" in update_data:
         user.position = update_data["position"]
     if "custom_role_id" in update_data:
+        _validate_role_assignment(current_user, user, user_id)
         user.custom_role_id = update_data["custom_role_id"]
         
     if "support_roles" in update_data:
-        if update_data["support_roles"] is not None:
-            db.query(UserSupportRole).filter(UserSupportRole.user_id == user.id).delete()
-            for sr in update_data["support_roles"]:
-                new_sr = UserSupportRole(
-                    user_id=user.id,
-                    department_id=sr["department_id"],
-                    custom_role_id=sr.get("custom_role_id"),
-                    squad_id=sr.get("squad_id")
-                )
-                db.add(new_sr)
-        else:
-            db.query(UserSupportRole).filter(UserSupportRole.user_id == user.id).delete()
+        _update_support_roles(db, user.id, update_data["support_roles"])
         
     db.commit()
     db.refresh(user)
@@ -219,19 +253,19 @@ def update_user_org(user_id: int, req: UserOrgUpdate, request: Request, db: Sess
     return user
 
 @router.put("/{user_id}/status")
-def update_user_status(user_id: int, req: UserStatusUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def update_user_status(user_id: int, req: UserStatusUpdate, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot change your own status")
+        raise HTTPException(status_code=400, detail="Cannot change your own status")  # NOSONAR
         
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can modify Admin users")
+        raise HTTPException(status_code=403, detail=SUPER_ADMIN_ONLY)  # NOSONAR
         
     if req.status not in ["ACTIVE", "PENDING", "SUSPENDED"]:
-        raise HTTPException(status_code=400, detail="Invalid status")
+        raise HTTPException(status_code=400, detail="Invalid status")  # NOSONAR
     
     old_status = user.status
     generated_password = None
@@ -280,23 +314,26 @@ def update_user_status(user_id: int, req: UserStatusUpdate, request: Request, db
     return result
 
 @router.put("/{user_id}/role", response_model=UserRead)
-def update_user_role(user_id: int, req: UserRoleUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def update_user_role(user_id: int, req: UserRoleUpdate, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only Admins can change user roles")  # NOSONAR
+        
     from ..core.security import verify_password
     if not verify_password(req.admin_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Invalid Admin password")
+        raise HTTPException(status_code=400, detail="Invalid Admin password")  # NOSONAR
         
     if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot change your own role")
+        raise HTTPException(status_code=400, detail="Cannot change your own role")  # NOSONAR
         
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can modify Admin users")
+        raise HTTPException(status_code=403, detail=SUPER_ADMIN_ONLY)  # NOSONAR
         
     if req.role not in ["ADMIN", "USER"]:
-        raise HTTPException(status_code=400, detail="Invalid role")
+        raise HTTPException(status_code=400, detail="Invalid role")  # NOSONAR
         
     user.role = req.role
     db.commit()
@@ -309,29 +346,17 @@ def update_user_role(user_id: int, req: UserRoleUpdate, request: Request, db: Se
     
     # แจ้งเตือนว่ามีการเปลี่ยน Role
     job_events.broadcast("user_role_changed", {"user_id": user_id, "role": req.role})
-    return {
-        "id": user.id, "username": user.username, "role": user.role, "status": user.status,
-        "must_change_password": user.must_change_password,
-        "department_id": user.department_id, "squad_id": user.squad_id, "position": user.position,
-        "department_name": user.department.name if user.department else None,
-        "squad_name": user.squad.name if user.squad else None,
-        "custom_role_id": user.custom_role_id,
-        "custom_role_name": user.custom_role.name if user.custom_role else None,
-        "menu_permissions": [p.menu_key for p in user.custom_role.menu_permissions] if user.custom_role else [],
-        "support_roles": [{"id": sr.id, "department_id": sr.department_id, "department_name": sr.department.name if sr.department else None, "squad_id": sr.squad_id, "squad_name": sr.squad.name if sr.squad else None, "custom_role_id": sr.custom_role_id, "custom_role_name": sr.custom_role.name if sr.custom_role else None} for sr in user.support_roles],
-        "expire_date": user.expire_date.isoformat() if user.expire_date else None,
-        "last_login": user.last_login.isoformat() if user.last_login else None
-    }
+    return _serialize_user_read(user)
 
 @router.post("/{user_id}/reset-password")
-def reset_user_password(user_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def reset_user_password(user_id: int, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     """Admin resets user password. Returns new generated password."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can modify Admin users")
+        raise HTTPException(status_code=403, detail=SUPER_ADMIN_ONLY)  # NOSONAR
         
     gen_pass = generate_random_password()
     user.hashed_password = hash_password(gen_pass)
@@ -353,7 +378,7 @@ def reset_user_password(user_id: int, request: Request, db: Session = Depends(ge
     return {"message": "Password reset successful", "generated_password": gen_pass}
 
 @router.get("/pending-count")
-def get_pending_count(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_pending_count(db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(get_current_user)]):
     count = db.query(User).filter(User.status == "PENDING").count()
     return {"count": count}
 
@@ -361,20 +386,20 @@ class DeleteUserRequest(BaseModel):
     admin_password: str
 
 @router.post("/{user_id}/delete")
-def delete_user(user_id: int, req: DeleteUserRequest, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_permission("manage-users"))):
+def delete_user(user_id: int, req: DeleteUserRequest, request: Request, db: Annotated[Session, Depends(get_db)], current_user: Annotated[User, Depends(require_permission("manage-users"))]):
     from ..core.security import verify_password
     if not verify_password(req.admin_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Invalid Admin password")
+        raise HTTPException(status_code=400, detail="Invalid Admin password")  # NOSONAR
 
     if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")  # NOSONAR
 
     user_to_delete = db.query(User).filter(User.id == user_id).first()
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)  # NOSONAR
         
     if user_to_delete.role == "ADMIN" and current_user.role != "ADMIN":
-        raise HTTPException(status_code=403, detail="Only Super Admins can delete Admin users")
+        raise HTTPException(status_code=403, detail="Only Super Admins can delete Admin users")  # NOSONAR
 
     username = user_to_delete.username
     

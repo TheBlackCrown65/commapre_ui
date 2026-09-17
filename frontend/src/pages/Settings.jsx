@@ -1073,6 +1073,50 @@ export default function Settings() {
         setMode('PAGE');
     };
 
+    // Helper to test if active element is a form input
+    const isInputElement = (el) => Boolean(
+        el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)
+    );
+
+    const getNextPageIndex = (currentIndex, length, delta) => {
+        if (currentIndex === -1) {
+            return delta > 0 ? 0 : length - 1;
+        }
+        const target = currentIndex + delta;
+        return (target >= 0 && target < length) ? target : currentIndex;
+    };
+
+    // Keyboard navigation (ArrowUp / ArrowDown) to switch pages/images without clicking
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (isInputElement(document.activeElement) || Swal?.isVisible?.() || showGridPreview || !pages?.length) return;
+
+            const isNext = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+            const isPrev = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+            if (!isNext && !isPrev) return;
+
+            e.preventDefault();
+            const currentIndex = selectedPage ? pages.findIndex(p => p.id === selectedPage.id) : -1;
+            const nextIndex = getNextPageIndex(currentIndex, pages.length, isNext ? 1 : -1);
+            if (nextIndex !== currentIndex && pages[nextIndex]) {
+                handleSelectPage(pages[nextIndex]);
+            }
+        };
+
+        globalThis.addEventListener('keydown', handleKeyDown);
+        return () => globalThis.removeEventListener('keydown', handleKeyDown);
+    }, [pages, selectedPage, showGridPreview]);
+
+    // Auto-scroll selected page item into view in the sidebar list
+    useEffect(() => {
+        if (selectedPage?.id) {
+            const el = document.getElementById(`page-item-${selectedPage.id}`);
+            if (el) {
+                el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+        }
+    }, [selectedPage?.id]);
+
     const handleChangeImage = (e, page) => {
         e.stopPropagation();
         setChangeImagePageId(page.id);
@@ -1144,6 +1188,28 @@ export default function Settings() {
         try { const res = await client.post('/api/v1/masks', payload); setMasks(prev => [...prev, { ...payload, id: res.data.id }]); } catch (err) { }
     };
 
+    const handleSmartMaskDetect = async ({ x, y }) => {
+        if (!selectedPage || mode !== 'PAGE') return;
+        try {
+            const res = await client.post('/api/v1/masks/detect-text', {
+                page_id: selectedPage.id,
+                x,
+                y
+            });
+            if (res.data?.status === 'ok') {
+                await handleMaskAdd({
+                    x: res.data.x,
+                    y: res.data.y,
+                    width: res.data.width,
+                    height: res.data.height,
+                    type: 'PAGE'
+                });
+            }
+        } catch (err) {
+            console.warn("Smart mask detection error:", err);
+        }
+    };
+
     const handleMaskUpdate = async (updatedMask) => {
         const payload = { x: Math.round(updatedMask.x), y: Math.round(updatedMask.y), width: Math.round(updatedMask.width), height: Math.round(updatedMask.height) };
         setMasks(prev => prev.map(m => m.id === updatedMask.id ? { ...m, ...payload } : m));
@@ -1174,7 +1240,10 @@ export default function Settings() {
     const handleAutoRedMark = async () => {
         if (!selectedFlow) return Swal.fire('Wait', 'Select a flow first', 'warning');
         try {
-            const res = await client.post(`/api/v1/masks/auto-global/${selectedFlow.id}`);
+            const url = selectedPage
+                ? `/api/v1/masks/auto-global/${selectedFlow.id}?page_id=${selectedPage.id}`
+                : `/api/v1/masks/auto-global/${selectedFlow.id}`;
+            await client.post(url);
             fetchMasks(selectedFlow.id);
             Swal.fire('Success', 'Auto Status Bar Red Mark applied successfully!', 'success');
         } catch (err) {
@@ -1294,6 +1363,7 @@ export default function Settings() {
                                 <div className="p-4 border-b bg-slate-50 flex justify-between items-center shrink-0">
                                     <h2 className="font-bold text-slate-700 flex items-center gap-2">
                                         <ImageIcon size={18} /> Pages <span className="text-sm font-normal text-slate-800">({pages.length})</span>
+                                        <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80 cursor-help" title="Navigate pages using Up / Down arrow keys (↑ / ↓)">↑↓</span>
                                     </h2>
                                     <div className="flex gap-1">
                                         <button onClick={() => setShowGridPreview(true)} className="p-1 hover:bg-slate-200 rounded text-indigo-600" title="Grid Preview & Reorder">
@@ -1325,6 +1395,7 @@ export default function Settings() {
                                                             <div
                                                                 ref={provided.innerRef}
                                                                 {...provided.draggableProps}
+                                                                id={`page-item-${page.id}`}
                                                                 className={clsx(
                                                                     "relative pl-2 py-2 pr-0 rounded flex items-center justify-between gap-1 border text-sm group transition-all",
                                                                     selectedPage?.id === page.id ? "bg-green-50 border-green-200 text-green-700 font-medium" : "bg-white hover:bg-slate-50 border-slate-100 text-slate-600",
@@ -1436,12 +1507,13 @@ export default function Settings() {
                                     onClick={() => setMode('PAGE')}
                                     disabled={!selectedPage}
                                     className={clsx("px-4 py-2 rounded-lg text-sm font-medium transition-colors border", mode === 'PAGE' ? "bg-blue-50 border-blue-200 text-blue-600" : "bg-white border-slate-200 hover:bg-slate-50", !selectedPage && "opacity-50 cursor-not-allowed")}
+                                    title="Page Mask (Blue) - Double click any text/number on the image to auto-detect and mask words"
                                 >Page Mask (Blue)</button>
                                 {selectedFlow && pages.length > 0 && (
                                     <button
                                         onClick={handleAutoRedMark}
                                         className="px-3 py-2 rounded-lg text-sm font-medium transition-colors border bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100 flex items-center gap-1.5"
-                                        title="Auto-generate or reset Status Bar Red Mark (covers status bar top 5.2% full width)"
+                                        title="Auto-generate or reset Status Bar Red Mark (covers status bar top 4% full width)"
                                     >
                                         ⚡ Auto Red Mark
                                     </button>
@@ -1490,6 +1562,7 @@ export default function Settings() {
                                         onMaskAdd={handleMaskAdd}
                                         onMaskUpdate={handleMaskUpdate}
                                         onMaskDelete={handleMaskDelete}
+                                        onSmartDetect={handleSmartMaskDetect}
                                         mode={mode}
                                     />
                                 </div>

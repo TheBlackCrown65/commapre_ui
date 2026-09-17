@@ -63,3 +63,42 @@ def test_update_folder(client, admin_token, db_session):
     assert res.status_code == 200
     db_session.refresh(folder1)
     assert folder1.parent_id is None
+
+def test_detect_text_box(client, admin_token, db_session, tmp_path, monkeypatch):
+    import cv2
+    import numpy as np
+    from app.models import Flow, Page
+
+    # Create dummy image with text
+    test_img = np.ones((600, 400, 3), dtype=np.uint8) * 255
+    cv2.putText(test_img, "1,500.00", (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 2)
+
+    img_dir = tmp_path / "images"
+    img_dir.mkdir()
+    img_file = img_dir / "test_page.png"
+    cv2.imwrite(str(img_file), test_img)
+
+    from app.api import endpoints
+    monkeypatch.setattr(endpoints, "OUTPUT_DIR", str(tmp_path))
+
+    flow = Flow(name="Test Flow")
+    db_session.add(flow)
+    db_session.commit()
+
+    page = Page(flow_id=flow.id, page_name="P1", image_path="images/test_page.png")
+    db_session.add(page)
+    db_session.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    res = client.post(
+        "/api/v1/masks/detect-text",
+        json={"page_id": page.id, "x": 120, "y": 195},
+        headers=headers
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ok"
+    assert data["width"] > 20
+    assert data["height"] > 10
+    assert 50 <= data["x"] <= 120
+    assert 150 <= data["y"] <= 205

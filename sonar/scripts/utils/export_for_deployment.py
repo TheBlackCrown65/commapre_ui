@@ -40,6 +40,8 @@ def create_deployment_export():
         # CI/CD & Temporary scripts
         'Jenkinsfile',
         'sonar-project.properties',
+        'sonar*',
+        'run_sonar_scan*',
         'fix*.py',
         'original_*.py',
         'recover.py',
