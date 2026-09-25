@@ -1,13 +1,14 @@
 /* eslint-disable react/prop-types */
 import { useState, useEffect, useRef, useMemo } from 'react';
 import client, { API_URL } from '../api/client';
-import { Plus, Trash2, Layers, ImageIcon, GripVertical, FolderPlus, Folder, ChevronRight, ChevronDown, FilePlus, FileText, Edit2, PanelLeftOpen, PanelLeftClose, RefreshCw, Building2, Users, MessageSquare, LayoutGrid, X } from 'lucide-react';
+import { Plus, Trash2, Layers, ImageIcon, GripVertical, FolderPlus, Folder, ChevronRight, ChevronDown, FilePlus, FileText, Edit2, PanelLeftOpen, PanelLeftClose, RefreshCw, Building2, Users, MessageSquare, LayoutGrid, X, Search } from 'lucide-react';
 import Swal from 'sweetalert2';
 import MaskingCanvas from '../components/MaskingCanvas';
 import Breadcrumb from '../components/Breadcrumb';
 import clsx from 'clsx';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useAuth } from '../contexts/AuthContext';
+import SearchableSelect from '../components/SearchableSelect';
 
 export default function Settings() {
     const { user: currentUser } = useAuth();
@@ -268,6 +269,37 @@ export default function Settings() {
         }
     };
 
+    const [deptFlows, setDeptFlows] = useState([]);
+    const [deptFolders, setDeptFolders] = useState([]);
+
+    const fetchDepartmentFlows = async () => {
+        if (!selectedDeptId) {
+            setDeptFlows([]);
+            setDeptFolders([]);
+            return;
+        }
+        try {
+            const timestamp = new Date().getTime();
+            const [resFolders, resFlows] = await Promise.all([
+                client.get(`/api/v1/folders?t=${timestamp}&department_id=${selectedDeptId}`),
+                client.get(`/api/v1/flows?t=${timestamp}&department_id=${selectedDeptId}`)
+            ]);
+            setDeptFolders(resFolders.data || []);
+            setDeptFlows(resFlows.data || []);
+        } catch (err) {
+            console.warn("Could not fetch department flows:", err);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedDeptId) {
+            fetchDepartmentFlows();
+        } else {
+            setDeptFlows([]);
+            setDeptFolders([]);
+        }
+    }, [selectedDeptId]);
+
     useEffect(() => {
         if (selectedSquadId) {
             fetchFoldersAndFlows();
@@ -293,16 +325,19 @@ export default function Settings() {
         } catch (err) { console.error(err); }
     };
 
-    const fetchFoldersAndFlows = async () => {
+    const fetchFoldersAndFlows = async (overrideSquadId = null) => {
+        const squadIdToUse = overrideSquadId !== null ? overrideSquadId : selectedSquadId;
+        if (!squadIdToUse) return;
         try {
             const timestamp = new Date().getTime();
-            const squadParam = selectedSquadId ? `&squad_id=${selectedSquadId}` : '';
+            const squadParam = `&squad_id=${squadIdToUse}`;
             const [resFolders, resFlows] = await Promise.all([
                 client.get(`/api/v1/folders?t=${timestamp}${squadParam}`),
                 client.get(`/api/v1/flows?t=${timestamp}${squadParam}`)
             ]);
             setFolders(resFolders.data || []);
             setFlows(resFlows.data || []);
+            return { folders: resFolders.data || [], flows: resFlows.data || [] };
         } catch (err) {
             console.error("API Fetch Error:", err);
             Swal.fire('Database Error', 'Failed to fetch Flow data', 'error');
@@ -552,6 +587,99 @@ export default function Settings() {
         setIsLoading(false);
     };
 
+    const activeSquadList = useMemo(() => {
+        if (!selectedDeptId) return [];
+        return departments.find(d => d.id === Number(selectedDeptId))?.squads || [];
+    }, [departments, selectedDeptId]);
+
+    const flowOptions = useMemo(() => {
+        const sourceFlows = (deptFlows && deptFlows.length > 0) ? deptFlows : flows;
+        const sourceFolders = (deptFolders && deptFolders.length > 0) ? deptFolders : folders;
+
+        return [...sourceFlows]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(f => {
+                const pathParts = [];
+                let curFid = f.folder_id;
+                while (curFid) {
+                    const parentFolder = sourceFolders.find(fo => fo.id === curFid);
+                    if (parentFolder) {
+                        pathParts.unshift(parentFolder.name);
+                        curFid = parentFolder.parent_id;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Show Squad name in prefix: [Squad] / Folder / Subfolder
+                const squadName = f.squad_id
+                    ? activeSquadList.find(s => s.id === f.squad_id)?.name
+                    : null;
+
+                const fullPath = [squadName, ...pathParts].filter(Boolean).join(' / ');
+
+                return {
+                    value: String(f.id),
+                    label: f.name,
+                    sublabel: fullPath ? `📁 ${fullPath}` : null
+                };
+            });
+    }, [selectedDeptId, selectedSquadId, flows, folders, deptFlows, deptFolders, activeSquadList]);
+
+    const handleFlowSearchSelect = async (flowId) => {
+        if (!flowId) return;
+        const pool = [...(deptFlows || []), ...(flows || [])];
+        const targetFlow = pool.find(f => String(f.id) === String(flowId));
+        if (!targetFlow) return;
+
+        let activeFolders = (deptFolders && deptFolders.length > 0) ? deptFolders : folders;
+
+        // If targetFlow belongs to a squad and squad is not selected or different:
+        if (targetFlow.squad_id && String(selectedSquadId) !== String(targetFlow.squad_id)) {
+            const targetSquadStr = String(targetFlow.squad_id);
+            setSelectedSquadId(targetSquadStr);
+            const result = await fetchFoldersAndFlows(targetSquadStr);
+            if (result?.folders) {
+                activeFolders = result.folders;
+            }
+        }
+
+        // Auto-expand all ancestor folders
+        const folderIdsToExpand = [];
+        let curFid = targetFlow.folder_id;
+        while (curFid) {
+            folderIdsToExpand.push(curFid);
+            const parentFolder = activeFolders.find(fo => fo.id === curFid);
+            curFid = parentFolder ? parentFolder.parent_id : null;
+        }
+
+        if (folderIdsToExpand.length > 0) {
+            setExpandedFolders(prev => Array.from(new Set([...prev, ...folderIdsToExpand])));
+        }
+
+        handleSelectFlow(targetFlow);
+
+        // Smooth scroll and visual warp-highlight on the flow item in the sidebar tree (with retry)
+        const highlightElement = () => {
+            const elem = document.getElementById(`settings-flow-item-${targetFlow.id}`);
+            if (elem) {
+                elem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                elem.classList.add('ring-2', 'ring-blue-400', 'bg-blue-100');
+                setTimeout(() => {
+                    elem.classList.remove('ring-2', 'ring-blue-400', 'bg-blue-100');
+                }, 1500);
+                return true;
+            }
+            return false;
+        };
+
+        setTimeout(() => {
+            if (!highlightElement()) {
+                setTimeout(highlightElement, 300);
+            }
+        }, 150);
+    };
+
     const renderTree = (parentId, level) => {
         const childFolders = folders.filter(f => (f.parent_id == null ? null : f.parent_id) === (parentId == null ? null : parentId)).sort((a, b) => a.name.localeCompare(b.name));
         const childFlows = flows.filter(f => (f.folder_id == null ? null : f.folder_id) === (parentId == null ? null : parentId)).sort((a, b) => a.name.localeCompare(b.name));
@@ -604,10 +732,11 @@ export default function Settings() {
                 {childFlows.map(flow => (
                     <div // NOSONAR
                         key={`flow-${flow.id}`}
+                        id={`settings-flow-item-${flow.id}`}
                         draggable="true"
                         onDragStart={(e) => handleDragStartFlow(e, flow.id)}
                         className={clsx(
-                            "flex items-center justify-between py-1.5 pr-0 rounded cursor-grab active:cursor-grabbing group transition-colors",
+                            "flex items-center justify-between py-1.5 pr-0 rounded cursor-grab active:cursor-grabbing group transition-all duration-300",
                             selectedFlow?.id === flow.id ? "bg-blue-50 border-l-2 border-blue-500" : "bg-white hover:bg-slate-50 border-l-2 border-transparent"
                         )}
                         style={{ paddingLeft: `${level * 16 + 24}px` }}
@@ -1315,6 +1444,18 @@ export default function Settings() {
                                             <option key={s.id} value={s.id}>{s.name}</option>
                                         ))}
                                     </select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Search size={14} className={clsx("shrink-0", selectedDeptId ? "text-teal-600" : "text-slate-400")} />
+                                    <SearchableSelect
+                                        compact={true}
+                                        disabled={!selectedDeptId}
+                                        value={selectedFlow ? String(selectedFlow.id) : ''}
+                                        onChange={handleFlowSearchSelect}
+                                        placeholder={selectedDeptId ? "— Search Flow —" : "— Select Department First —"}
+                                        className="flex-1 w-full min-w-0"
+                                        options={flowOptions}
+                                    />
                                 </div>
                             </div>
 

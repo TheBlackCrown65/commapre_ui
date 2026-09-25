@@ -15,6 +15,11 @@ DATABASE_URL = os.getenv(
     "sqlite:///./data/robot_verify.db"  # fallback สำหรับ dev
 )
 
+# SQLAlchemy 2.1+ defaults "postgresql://" to "psycopg" (v3). 
+# Convert to "postgresql+psycopg2://" when psycopg2 is installed.
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # SQLite ต้องการ connect_args พิเศษ, PostgreSQL ไม่ต้อง
 connect_args = {}
 

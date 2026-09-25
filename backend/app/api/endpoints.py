@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..database import get_db
-from ..models import Flow, Page, Mask, Job, FlowCreate, FlowRead, PageRead, MaskCreateRequest, MaskUpdateRequest, JobRead, FlowFolder, FolderCreate, FolderRead, SystemConfig, SystemConfigRead, SystemConfigUpdate, User
+from ..models import Flow, Page, Mask, Job, FlowCreate, FlowRead, PageRead, MaskCreateRequest, MaskUpdateRequest, JobRead, FlowFolder, FolderCreate, FolderRead, SystemConfig, SystemConfigRead, SystemConfigUpdate, User, Squad, Department
 from ..core.deps import get_current_user, require_admin
 from ..core.audit_logger import log_action
 from ..events import job_events
@@ -44,10 +44,13 @@ class SmartMaskDetectRequest(BaseModel):
 
 # --- Folders ---
 @router.get("/folders", response_model=List[FolderRead])
-def read_folders(squad_id: Optional[int] = None, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def read_folders(squad_id: Optional[int] = None, department_id: Optional[int] = None, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     query = db.query(FlowFolder)
     if squad_id:
         query = query.filter(FlowFolder.squad_id == squad_id)
+    elif department_id:
+        dept_squad_ids = [s.id for s in db.query(Squad.id).filter(Squad.department_id == department_id).all()]
+        query = query.filter(FlowFolder.squad_id.in_(dept_squad_ids))
     return query.all()
 
 @router.post("/folders", response_model=FolderRead)
@@ -211,7 +214,7 @@ def delete_folder(folder_id: int, request: Request, db: Session = Depends(get_db
 
 # --- Flows ---
 @router.get("/flows", response_model=List[FlowRead])
-def read_flows(squad_id: Optional[int] = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
+def read_flows(squad_id: Optional[int] = None, department_id: Optional[int] = None, skip: int = 0, limit: int = 1000, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     query = db.query(Flow).order_by(Flow.sort_order.asc(), Flow.id.desc())
     if squad_id:
         # Filter flows by folders that belong to this squad OR root flows with this squad_id
@@ -219,16 +222,24 @@ def read_flows(squad_id: Optional[int] = None, skip: int = 0, limit: int = 100, 
         query = query.filter(
             (Flow.folder_id.in_(squad_folder_ids)) | (Flow.squad_id == squad_id)
         )
+    elif department_id:
+        dept_squad_ids = [s.id for s in db.query(Squad.id).filter(Squad.department_id == department_id).all()]
+        dept_folder_ids = [f.id for f in db.query(FlowFolder.id).filter(FlowFolder.squad_id.in_(dept_squad_ids)).all()]
+        query = query.filter(
+            (Flow.folder_id.in_(dept_folder_ids)) | (Flow.squad_id.in_(dept_squad_ids))
+        )
         
     flows = query.offset(skip).limit(limit).all()
     out = []
     
     for flow in flows:
         page_count = db.query(Page).filter(Page.flow_id == flow.id).count()
+        eff_squad_id = flow.squad_id or (flow.folder.squad_id if flow.folder else None)
         f_dict = {
             "id": flow.id,
             "name": flow.name,
             "folder_id": flow.folder_id,
+            "squad_id": eff_squad_id,
             "sort_order": flow.sort_order,
             "note": flow.note,
             "page_count": page_count,
@@ -479,34 +490,6 @@ def create_page(flow_id: int = Form(...), page_name: str = Form(...), file: Uplo
             level="ERROR", module="FlowMgmt", request=request
         )
         raise HTTPException(status_code=500, detail="Failed to create page")
-
-    # Auto Red Mark (Global Mask for Status Bar) ถ้า flow นี้ยังไม่เคยมี Global Mask
-    try:
-        has_global_mask = db.query(Mask).filter(Mask.flow_id == flow_id, Mask.type == 'GLOBAL').first()
-        if not has_global_mask and os.path.exists(file_path):
-            with Image.open(file_path) as img:
-                img_w, img_h = img.size
-            if img_w > 0 and img_h > 0:
-                # คำนวณความสูงแถบ Status Bar บนสุด (~4.2% ของความสูง หรือ ~113px สำหรับจอ 1242x2688)
-                mask_h = max(40, int(round(img_h * 0.042)))
-                auto_mask = Mask(
-                    flow_id=flow_id,
-                    page_id=None,
-                    type='GLOBAL',
-                    x=0,
-                    y=0,
-                    width=img_w,
-                    height=mask_h
-                )
-                db.add(auto_mask)
-                db.commit()
-                log_action(
-                    user=current_user.username, event="MASK_AUTO_CREATED",
-                    details=f"flow_id={flow_id}, type=GLOBAL, w={img_w}, h={mask_h}",
-                    level="INFO", module="FlowMgmt", request=request
-                )
-    except Exception as mask_err:
-        print(f"Auto mask creation warning: {mask_err}")
 
     job_events.broadcast("page_created", {"flow_id": flow_id, "squad_id": flow.squad_id})
     log_action(
@@ -771,61 +754,131 @@ def generate_auto_global_mask(
 
 def _extract_text_box(roi, rel_x, rel_y, img_w, img_h, roi_x1, roi_x2, roi_y1, roi_y2, click_x, click_y):
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    border_pixels = np.concatenate([
-        thresh[0, :], thresh[-1, :], thresh[:, 0], thresh[:, -1]
-    ])
-    if np.mean(border_pixels) > 127:
-        thresh = cv2.bitwise_not(thresh)
+    # ดึงลายเส้นข้อความด้วย Background Subtraction รองรับทั้งตัวหนังสือมืดบนพื้นสว่าง และตัวหนังสือขาวบนปุ่มสี (เช่น ปุ่ม Save)
+    bg = cv2.medianBlur(gray, 21)
+    diff = cv2.absdiff(gray, bg)
+    otsu_val, thresh = cv2.threshold(diff, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if otsu_val < 15:
+        _, thresh = cv2.threshold(diff, 18, 255, cv2.THRESH_BINARY)
 
-    vert_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 35))
-    vert_lines = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vert_kernel)
-    thresh_clean = cv2.subtract(thresh, vert_lines)
-    thresh_clean[:, :10] = 0
-    thresh_clean[:, -10:] = 0
+    thresh[:, :10] = 0
+    thresh[:, -10:] = 0
 
-    kw = max(40, int(round(img_w * 0.038)))
-    kh = max(4, int(round(img_h * 0.003)))
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kw, kh))
-    dilated = cv2.dilate(thresh_clean, kernel, iterations=1)
+    cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    comps = []
+    for c in cnts:
+        bx, by, bw, bh = cv2.boundingRect(c)
+        if bw >= 2 and bh >= 4:
+            # กรองเส้นแบ่งแนวตั้งบางๆ ออก
+            if bw <= 2 and bh >= 30:
+                continue
+            comps.append((bx, by, bw, bh))
 
-    contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    best_box = None
-    min_dist = float('inf')
+    if not comps:
+        def_w = max(60, int(round(img_w * 0.08)))
+        def_h = max(25, int(round(img_h * 0.02)))
+        return int(max(0, click_x - def_w // 2)), int(max(0, click_y - def_h // 2)), int(def_w), int(def_h)
 
-    for cnt in contours:
-        bx, by, bw, bh = cv2.boundingRect(cnt)
-        if bw < 5 or bh < 5 or bw > (roi_x2 - roi_x1) * 0.98 or bh > (roi_y2 - roi_y1) * 0.85:
-            continue
+    # ค้นหาองค์ประกอบที่คลิกก่อน เพื่อทราบแนวแกน Y และความสูงของบรรทัด
+    clicked_comp = min(comps, key=lambda c: (c[0] + c[2] / 2 - rel_x)**2 + (c[1] + c[3] / 2 - rel_y)**2)
+    line_cy = clicked_comp[1] + clicked_comp[3] / 2
+    line_h = max(24, clicked_comp[3])
 
-        inside = (bx <= rel_x <= bx + bw) and (by <= rel_y <= by + bh)
-        if inside:
-            best_box = (bx, by, bw, bh)
+    # องค์ประกอบที่อยู่บนบรรทัดเดียวกัน (รวมทั้งตัวอักษรปกติและจุดไข่ปลา ... / เครื่องหมายบนเส้นบรรทัด)
+    line_comps = []
+    for c in comps:
+        v_overlap = max(0, min(c[1] + c[3], clicked_comp[1] + clicked_comp[3]) - max(c[1], clicked_comp[1]))
+        c_cy = c[1] + c[3] / 2
+        if v_overlap > 0 or abs(c_cy - line_cy) <= max(26, int(line_h * 0.9)):
+            line_comps.append(c)
+
+    line_comps.sort(key=lambda c: c[0])
+
+    # รวมชิ้นส่วนที่ซ้อนทับหรือแตะกันในแนวนอน (เช่น ตัวอักษรที่มีสระ/วรรณยุกต์ หรือชิ้นส่วนไอคอน)
+    merged = []
+    for c in line_comps:
+        if not merged:
+            merged.append(list(c))
+        else:
+            prev = merged[-1]
+            if c[0] <= prev[0] + prev[2]:
+                new_x = min(prev[0], c[0])
+                new_y = min(prev[1], c[1])
+                new_r = max(prev[0] + prev[2], c[0] + c[2])
+                new_b = max(prev[1] + prev[3], c[1] + c[3])
+                merged[-1] = [new_x, new_y, new_r - new_x, new_b - new_y]
+            else:
+                merged.append(list(c))
+
+    click_idx = min(range(len(merged)), key=lambda i: abs((merged[i][0] + merged[i][2] / 2) - rel_x))
+
+    # คำนวณความสูงเฉลี่ยของข้อความบนบรรทัด เพื่อใช้แยกแยะไอคอน
+    text_heights = [m[3] for m in merged if m[3] >= 12]
+    med_h = float(np.median(text_heights)) if text_heights else 30.0
+
+    # ฟังก์ชันตรวจสอบว่าชิ้นส่วนเป็น icon (ความสูงใหญ่กว่าตัวหนังสือชัดเจน และมีขนาดกว้างพอ)
+    def is_icon(c):
+        return c[3] > med_h * 1.6 and c[2] > med_h * 0.9
+
+    clicked_is_icon = is_icon(merged[click_idx])
+
+    # กำหนดระยะห่างสูงสุดระหว่างตัวอักษร/คำ (กว้างพอสำหรับเว้นวรรค แต่ไม่ข้ามช่องว่างไปยังไอคอนข้างหน้า/หลัง)
+    max_gap = min(30, max(18, int(round(img_w * 0.022))))
+
+    # ขยายขอบเขตไปทางซ้าย (หยุดเมื่อเจอระยะห่างเกินช่วงคำ หรือไอคอนข้างหน้า)
+    left_idx = click_idx
+    while left_idx > 0:
+        prev = merged[left_idx - 1]
+        cur = merged[left_idx]
+        gap = cur[0] - (prev[0] + prev[2])
+        if gap > max_gap:
             break
-        dx = max(bx - rel_x, 0, rel_x - (bx + bw))
-        dy = max(by - rel_y, 0, rel_y - (by + bh))
-        dist = (dx * dx + dy * dy) ** 0.5
-        if dist < 45 and dist < min_dist:
-            min_dist = dist
-            best_box = (bx, by, bw, bh)
+        # ตัวอักษรในคำเดียวกัน (gap < 12) จะไม่ถูกมองว่าเป็นไอคอนเด็ดขาด
+        if gap >= 12 and not clicked_is_icon and is_icon(prev):
+            break
+        left_idx -= 1
 
-    if best_box:
-        bx, by, bw, bh = best_box
-        pad_x = max(6, int(round(img_w * 0.005)))
-        pad_y = max(8, int(round(img_h * 0.005)))
-        final_x = max(0, roi_x1 + bx - pad_x)
-        final_y = max(0, roi_y1 + by - pad_y)
-        final_w = min(img_w - final_x, bw + pad_x * 2)
-        final_h = min(img_h - final_y, bh + pad_y * 2)
-    else:
-        def_w = max(80, int(round(img_w * 0.10)))
-        def_h = max(30, int(round(img_h * 0.02)))
-        final_x = max(0, click_x - def_w // 2)
-        final_y = max(0, click_y - def_h // 2)
-        final_w = min(img_w - final_x, def_w)
-        final_h = min(img_h - final_y, def_h)
+    # ขยายขอบเขตไปทางขวา (หยุดเมื่อเจอระยะห่างเกินช่วงคำ หรือไอคอนข้างหลัง)
+    right_idx = click_idx
+    while right_idx < len(merged) - 1:
+        nxt = merged[right_idx + 1]
+        cur = merged[right_idx]
+        gap = nxt[0] - (cur[0] + cur[2])
+        if gap > max_gap:
+            break
+        if gap >= 12 and not clicked_is_icon and is_icon(nxt):
+            break
+        right_idx += 1
+
+    selected = merged[left_idx : right_idx + 1]
+    min_x = min(c[0] for c in selected)
+    max_x = max(c[0] + c[2] for c in selected)
+    min_y = min(c[1] for c in selected)
+    max_y = max(c[1] + c[3] for c in selected)
+
+    bw = max_x - min_x
+    bh = max_y - min_y
+
+    pad_x = max(12, int(round(img_w * 0.015)))
+    pad_y = max(6, int(round(img_h * 0.004)))
+    safe_gap = max(4, int(round(img_w * 0.003)))
+
+    # ขยายขอบซ้ายรอบข้อความที่คลิก โดยถ้ามีไอคอนอยู่ข้างหน้า ต้องไม่ทับไอคอน
+    final_x = max(0, roi_x1 + min_x - pad_x)
+    if left_idx > 0 and is_icon(merged[left_idx - 1]):
+        left_icon_edge = roi_x1 + merged[left_idx - 1][0] + merged[left_idx - 1][2]
+        final_x = max(final_x, left_icon_edge + safe_gap)
+
+    # ขยายขอบขวารอบข้อความที่คลิกให้สมมาตรและคลุมจุดไข่ปลา (...) สวยงาม โดยถ้ามีไอคอนข้างหลัง ต้องไม่ทับไอคอน
+    final_right = min(img_w, roi_x1 + max_x + pad_x)
+    if right_idx < len(merged) - 1 and is_icon(merged[right_idx + 1]):
+        right_icon_edge = roi_x1 + merged[right_idx + 1][0]
+        final_right = min(final_right, right_icon_edge - safe_gap)
+
+    final_y = max(0, roi_y1 + min_y - pad_y)
+    final_w = max(10, final_right - final_x)
+    final_h = min(img_h - final_y, bh + pad_y * 2)
 
     return int(final_x), int(final_y), int(final_w), int(final_h)
 

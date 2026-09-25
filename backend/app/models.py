@@ -285,6 +285,7 @@ class FlowRead(BaseModel):
     id: int
     name: str
     folder_id: Optional[int] = None
+    squad_id: Optional[int] = None
     sort_order: int = 0
     note: Optional[str] = None
     page_count: int = 0

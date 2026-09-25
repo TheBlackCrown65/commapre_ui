@@ -9,7 +9,9 @@ export default function SearchableSelect({
     onChange,
     placeholder = "Select...",
     disabled = false,
-    className = ""
+    className = "",
+    compact = false,
+    buttonClassName = ""
 }) {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -28,9 +30,12 @@ export default function SearchableSelect({
 
     const selectedOption = options.find(opt => opt.value === value);
 
-    const filteredOptions = options.filter(opt =>
-        opt.label.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredOptions = options.filter(opt => {
+        const query = searchTerm.toLowerCase();
+        const matchLabel = opt.label.toLowerCase().includes(query);
+        const matchSublabel = opt.sublabel ? opt.sublabel.toLowerCase().includes(query) : false;
+        return matchLabel || matchSublabel;
+    });
 
     return (
         <div ref={wrapperRef} className={clsx("relative", className || "w-full sm:w-[280px]")}>
@@ -43,21 +48,25 @@ export default function SearchableSelect({
                     }
                 }}
                 className={clsx(
-                    "w-full min-h-10 flex items-center justify-between border-2 rounded-lg px-2.5 py-1.5 transition-all outline-none text-left gap-2",
+                    "w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-all outline-none text-left gap-2",
+                    compact ? "min-h-8 text-xs border border-slate-200" : "min-h-10 text-xs sm:text-sm border-2",
                     disabled ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed" : "cursor-pointer bg-white focus:border-teal-500 focus:ring-1 focus:ring-teal-500",
-                    !disabled && !value ? "border-teal-500 text-teal-600 font-bold shadow-sm" : "",
-                    !disabled && value ? "border-teal-500 text-teal-700 font-medium shadow-sm hover:border-teal-600" : ""
+                    !disabled && !compact && !value ? "border-teal-500 text-teal-600 font-bold shadow-sm" : "",
+                    !disabled && !compact && value ? "border-teal-500 text-teal-700 font-medium shadow-sm hover:border-teal-600" : "",
+                    !disabled && compact && !value ? "border-slate-200 text-slate-400 hover:border-slate-300" : "",
+                    !disabled && compact && value ? "border-teal-500 text-teal-700 font-medium bg-teal-50/30" : "",
+                    buttonClassName
                 )}
                 onClick={() => !disabled && setIsOpen(!isOpen)}
                 disabled={disabled}
             >
                 <span
-                    className="break-all whitespace-normal text-xs sm:text-sm font-medium leading-snug pr-1 flex-1"
+                    className="break-all whitespace-normal text-xs sm:text-sm font-medium leading-snug pr-1 flex-1 truncate"
                     title={selectedOption ? selectedOption.label : placeholder}
                 >
                     {selectedOption ? selectedOption.label : placeholder}
                 </span>
-                <ChevronDown size={16} className={clsx("transition-transform shrink-0 self-center", isOpen && "rotate-180")} />
+                <ChevronDown size={14} className={clsx("transition-transform shrink-0 self-center text-slate-400", isOpen && "rotate-180")} />
             </button>
 
             {isOpen && (
@@ -71,6 +80,20 @@ export default function SearchableSelect({
                                 placeholder="Search..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (filteredOptions.length > 0) {
+                                            onChange(filteredOptions[0].value);
+                                            setIsOpen(false);
+                                            setSearchTerm('');
+                                        }
+                                    } else if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setIsOpen(false);
+                                        setSearchTerm('');
+                                    }
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                                 autoFocus
                             />
@@ -115,8 +138,13 @@ export default function SearchableSelect({
                                             setSearchTerm('');
                                         }}
                                     >
-                                        <span className="whitespace-nowrap">{highlightedLabel}</span>
-                                        {value === opt.value && <Check size={14} className="text-teal-600 shrink-0" />}
+                                        <div className="flex flex-col min-w-0 pr-2">
+                                            <span className="whitespace-nowrap">{highlightedLabel}</span>
+                                            {opt.sublabel && (
+                                                <span className="text-[11px] text-slate-400 whitespace-nowrap mt-0.5">{opt.sublabel}</span>
+                                            )}
+                                        </div>
+                                        {value === opt.value && <Check size={14} className="text-teal-600 shrink-0 self-center" />}
                                     </button>
                                 );
                             })}
@@ -132,12 +160,15 @@ SearchableSelect.propTypes = {
     options: PropTypes.arrayOf(
         PropTypes.shape({
             label: PropTypes.string.isRequired,
-            value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired
+            value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+            sublabel: PropTypes.string
         })
     ),
     value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     onChange: PropTypes.func.isRequired,
     placeholder: PropTypes.string,
     disabled: PropTypes.bool,
-    className: PropTypes.string
+    className: PropTypes.string,
+    compact: PropTypes.bool,
+    buttonClassName: PropTypes.string
 };

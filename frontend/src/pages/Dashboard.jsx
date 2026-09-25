@@ -106,7 +106,7 @@ export default function Dashboard() {
             } else if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && currentDiffIndex < diffItems.length - 1) {
                 setPreviewComparison(diffItems[currentDiffIndex + 1]);
             } else if (e.key === '+' || e.key === '=') {
-                setCompZoom(z => Math.min(2.5, Number((z + 0.25).toFixed(2))));
+                setCompZoom(z => Math.min(3.0, Number((z + 0.25).toFixed(2))));
             } else if (e.key === '-' || e.key === '_') {
                 setCompZoom(z => Math.max(0.5, Number((z - 0.25).toFixed(2))));
             } else if (e.key === '0') {
@@ -393,39 +393,47 @@ export default function Dashboard() {
         };
     }, [selectedJob]);
 
-    const getImageDataUrl = (url, maxWidth = 600) => {
+    const getImageDataUrl = async (url) => {
+        if (!url) return null;
+        try {
+            const res = await fetch(url);
+            if (res.ok) {
+                const blob = await res.blob();
+                return await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(blob);
+                });
+            }
+        } catch (e) {
+            console.warn("Direct image fetch failed, using fallback:", e);
+        }
+
         return new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = 'Anonymous';
-            img.src = url
+            img.src = url;
 
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-
-                if (width > maxWidth) {
-                    height = Math.round((height * maxWidth) / width);
-                    width = maxWidth;
-                }
-
-                canvas.width = width;
-                canvas.height = height;
+                canvas.width = img.width;
+                canvas.height = img.height;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
+                ctx.drawImage(img, 0, 0);
 
                 try {
-                    resolve(canvas.toDataURL('image/jpeg', 0.8));
+                    resolve(canvas.toDataURL('image/png'));
                 } catch (e) {
-                    console.warn("Canvas Tainted:", url);
-                    resolve(null);
+                    try {
+                        resolve(canvas.toDataURL('image/jpeg', 0.95));
+                    } catch (err) {
+                        resolve(null);
+                    }
                 }
             };
 
-            img.onerror = () => {
-                console.warn("Failed to load image:", url);
-                resolve(null);
-            };
+            img.onerror = () => resolve(null);
         });
     };
 
@@ -575,7 +583,40 @@ export default function Dashboard() {
 
             await new Promise(resolve => setTimeout(resolve, 800));
 
-            const pdf = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4', compress: true });
+            // Image cache to avoid duplicate network/canvas processing
+            const imageCache = new Map();
+            const fetchCachedImageDataUrl = async (url) => {
+                if (!url) return null;
+                if (imageCache.has(url)) return imageCache.get(url);
+                const data = await getImageDataUrl(url);
+                imageCache.set(url, data);
+                return data;
+            };
+
+            // Pre-check first comparison item's dimensions to determine default PDF orientation
+            let isFirstJobMobile = false;
+            if (comparisons.length > 0) {
+                const sampleItem = comparisons[0];
+                const sampleUrl = sampleItem.b_img || sampleItem.a_img || sampleItem.diff_img;
+                if (sampleUrl) {
+                    const sampleData = await fetchCachedImageDataUrl(sampleUrl);
+                    if (sampleData) {
+                        try {
+                            const tempPdf = new jsPDF();
+                            const props = tempPdf.getImageProperties(sampleData);
+                            if (props && props.width && props.height) {
+                                // สูงมากกว่ากว้าง = mobile
+                                isFirstJobMobile = props.height > props.width;
+                            }
+                        } catch (e) {
+                            console.warn("Could not detect initial orientation:", e);
+                        }
+                    }
+                }
+            }
+
+            const initialOrientation = isFirstJobMobile ? 'l' : 'p';
+            const pdf = new jsPDF({ orientation: initialOrientation, unit: 'mm', format: 'a4', compress: true });
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
             const margin = 10;
@@ -658,15 +699,41 @@ export default function Dashboard() {
             pdf.text(`Job ID: #${selectedJob.id}`, pageWidth / 2, centerY + 5, { align: 'center' });
 
             for (let i = 0; i < comparisons.length; i++) {
-                pdf.addPage();
                 const item = comparisons[i];
 
-                pdf.setFontSize(14);
-                pdf.setTextColor(40, 40, 40);
-                const filePrefix = `File: ${item.name}  `;
-                pdf.text(filePrefix, margin, margin + 8);
+                const [imgA, imgB, imgDiff] = await Promise.all([
+                    fetchCachedImageDataUrl(item.a_img),
+                    fetchCachedImageDataUrl(item.b_img),
+                    fetchCachedImageDataUrl(item.diff_img)
+                ]);
 
-                const textWidth = pdf.getTextWidth(filePrefix);
+                // Determine whether this item is mobile or web based on image dimensions
+                // สูงมากกว่ากว้าง = mobile (landscape page, horizontal 3 columns)
+                // สูงน้อยกว่ากว้าง = web (portrait page, vertical 3 rows)
+                const sampleImg = imgB || imgA || imgDiff;
+                let isMobile = false; // default web
+                let sampleProps = null;
+                if (sampleImg) {
+                    try {
+                        sampleProps = pdf.getImageProperties(sampleImg);
+                        if (sampleProps && sampleProps.width && sampleProps.height) {
+                            isMobile = sampleProps.height > sampleProps.width;
+                        }
+                    } catch (e) {
+                        console.warn("Could not determine image properties:", e);
+                    }
+                }
+
+                // Add page: mobile -> landscape ('l'), web -> portrait ('p')
+                pdf.addPage('a4', isMobile ? 'l' : 'p');
+                const curPageWidth = pdf.internal.pageSize.getWidth();
+                const curPageHeight = pdf.internal.pageSize.getHeight();
+                const curContentWidth = curPageWidth - (margin * 2);
+
+                // --- Header (File name, Status Badge, Counter) ---
+                let headerFontSize = 14;
+                pdf.setFontSize(headerFontSize);
+                pdf.setTextColor(40, 40, 40);
 
                 let badgeText = "";
                 let badgeColor = [0, 0, 0];
@@ -685,6 +752,19 @@ export default function Dashboard() {
                 pdf.setFont(undefined, 'bold');
                 const badgeTextWidth = pdf.getTextWidth(badgeText);
                 const badgeHeight = 7.5;
+
+                // Adjust font size if file name is long to prevent header overflow
+                pdf.setFontSize(headerFontSize);
+                pdf.setFont(undefined, 'normal');
+                while (margin + pdf.getTextWidth(`File: ${item.name}  `) + badgeTextWidth + 35 > curPageWidth && headerFontSize > 9) {
+                    headerFontSize -= 1;
+                    pdf.setFontSize(headerFontSize);
+                }
+
+                const filePrefix = `File: ${item.name}  `;
+                pdf.text(filePrefix, margin, margin + 8);
+                const textWidth = pdf.getTextWidth(filePrefix);
+
                 const badgeX = margin + textWidth;
                 const badgeY = margin + 1.8;
 
@@ -692,52 +772,122 @@ export default function Dashboard() {
                 pdf.roundedRect(badgeX, badgeY, badgeTextWidth, badgeHeight, 1, 1, 'F');
 
                 pdf.setTextColor(255, 255, 255);
+                pdf.setFontSize(12);
+                pdf.setFont(undefined, 'bold');
                 pdf.text(badgeText, badgeX, margin + 7);
 
                 pdf.setFont(undefined, 'normal');
-                pdf.setFontSize(14);
+                pdf.setFontSize(headerFontSize);
                 pdf.setTextColor(150, 150, 150);
                 pdf.text(` (${i + 1}/${comparisons.length})`, badgeX + badgeTextWidth + 2, margin + 7.5);
 
-                const [imgA, imgB, imgDiff] = await Promise.all([
-                    getImageDataUrl(item.a_img),
-                    getImageDataUrl(item.b_img),
-                    getImageDataUrl(item.diff_img)
-                ]);
+                if (isMobile) {
+                    // ==========================================
+                    // Mobile: รูปเรียงแนวนอน (3 Columns Side-by-Side)
+                    // ==========================================
+                    const startY = margin + 15;
+                    const gap = 5;
+                    const colWidth = (curContentWidth - (gap * 2)) / 3;
 
-                const startY = margin + 15;
-                const gap = 5;
-                const colWidth = (contentWidth - (gap * 2)) / 3;
+                    const drawColumn = (label, imgData, x) => {
+                        pdf.setFontSize(10);
+                        pdf.setFont(undefined, 'bold');
+                        pdf.setTextColor(100, 100, 100);
+                        pdf.text(label, x, startY);
 
-                const drawColumn = (label, imgData, x) => {
-                    pdf.setFontSize(10);
-                    pdf.setTextColor(100, 100, 100);
-                    pdf.text(label, x, startY);
+                        if (imgData) {
+                            try {
+                                const imgProps = pdf.getImageProperties(imgData);
+                                let imgW = colWidth;
+                                let imgH = (imgProps.height * colWidth) / imgProps.width;
+                                const maxHeight = curPageHeight - startY - 10;
+                                if (imgH > maxHeight) {
+                                    imgH = maxHeight;
+                                    imgW = (imgProps.width * imgH) / imgProps.height;
+                                }
 
-                    if (imgData) {
-                        try {
-                            const imgProps = pdf.getImageProperties(imgData);
-                            let imgH = (imgProps.height * colWidth) / imgProps.width;
-                            const maxHeight = pageHeight - startY - 10;
-                            if (imgH > maxHeight) imgH = maxHeight;
+                                const drawX = x + (colWidth - imgW) / 2;
+                                const imgFmt = (typeof imgData === 'string' && imgData.startsWith('data:image/png')) ? 'PNG' : 'JPEG';
+                                pdf.addImage(imgData, imgFmt, drawX, startY + 3, imgW, imgH);
+                                pdf.setDrawColor(140, 140, 140);
+                                pdf.rect(drawX, startY + 3, imgW, imgH);
+                            } catch (e) { }
+                        } else {
+                            pdf.setDrawColor(150, 150, 150);
+                            pdf.setFillColor(245, 245, 245);
+                            pdf.rect(x, startY + 3, colWidth, colWidth * 0.56, 'FD');
+                            pdf.setFontSize(8);
+                            pdf.setTextColor(150, 150, 150);
+                            pdf.text("Image Error", x + colWidth / 2, startY + 3 + (colWidth * 0.56) / 2, { align: "center" });
+                        }
+                    };
 
-                            pdf.addImage(imgData, 'JPEG', x, startY + 3, colWidth, imgH);
-                            pdf.setDrawColor(120, 120, 120);
-                            pdf.rect(x, startY + 3, colWidth, imgH);
-                        } catch (e) { }
-                    } else {
-                        pdf.setDrawColor(150, 150, 150);
-                        pdf.setFillColor(245, 245, 245);
-                        pdf.rect(x, startY + 3, colWidth, colWidth * 0.56, 'FD');
-                        pdf.setFontSize(8);
-                        pdf.setTextColor(150, 150, 150);
-                        pdf.text("Image Error", x + colWidth / 2, startY + 3 + (colWidth * 0.56) / 2, { align: "center" });
+                    drawColumn("Reference (Master)", imgB, margin);
+                    drawColumn("New Image", imgA, margin + colWidth + gap);
+                    drawColumn("Difference", imgDiff, margin + (colWidth + gap) * 2);
+                } else {
+                    // ==========================================
+                    // Web: รูปเรียงแนวตั้ง (3 Rows Stacked Vertically)
+                    // ==========================================
+                    const startY = margin + 14;
+                    const bottomMargin = 10;
+                    const availableHeight = curPageHeight - startY - bottomMargin;
+                    const labelH = 4;
+                    const labelGap = 1.5;
+
+                    const minRowGap = 3;
+                    const maxRowH = Math.floor((availableHeight - (3 * (labelH + labelGap) + 2 * minRowGap)) / 3);
+                    const maxRowW = curContentWidth;
+
+                    let targetW = maxRowW;
+                    let targetH = maxRowH;
+
+                    if (sampleProps && sampleProps.width && sampleProps.height) {
+                        const calculatedH = (sampleProps.height * maxRowW) / sampleProps.width;
+                        if (calculatedH > maxRowH) {
+                            targetH = maxRowH;
+                            targetW = (sampleProps.width * maxRowH) / sampleProps.height;
+                        } else {
+                            targetH = calculatedH;
+                            targetW = maxRowW;
+                        }
                     }
-                };
 
-                drawColumn("Reference (Master)", imgB, margin);
-                drawColumn("New Image", imgA, margin + colWidth + gap);
-                drawColumn("Difference", imgDiff, margin + (colWidth + gap) * 2);
+                    const imgX = margin + (curContentWidth - targetW) / 2;
+                    const totalUsedHeight = 3 * targetH + 3 * (labelH + labelGap);
+                    const rowGap = Math.min(8, Math.max(3, (availableHeight - totalUsedHeight) / 2));
+
+                    const drawRow = (label, imgData, rowIndex) => {
+                        const rowY = startY + rowIndex * (targetH + labelH + labelGap + rowGap);
+
+                        pdf.setFontSize(9.5);
+                        pdf.setFont(undefined, 'bold');
+                        pdf.setTextColor(100, 100, 100);
+                        pdf.text(label, imgX, rowY + labelH);
+
+                        const imgY = rowY + labelH + labelGap;
+
+                        if (imgData) {
+                            try {
+                                const imgFmt = (typeof imgData === 'string' && imgData.startsWith('data:image/png')) ? 'PNG' : 'JPEG';
+                                pdf.addImage(imgData, imgFmt, imgX, imgY, targetW, targetH);
+                                pdf.setDrawColor(140, 140, 140);
+                                pdf.rect(imgX, imgY, targetW, targetH);
+                            } catch (e) { }
+                        } else {
+                            pdf.setDrawColor(150, 150, 150);
+                            pdf.setFillColor(245, 245, 245);
+                            pdf.rect(imgX, imgY, targetW, targetH, 'FD');
+                            pdf.setFontSize(8);
+                            pdf.setTextColor(150, 150, 150);
+                            pdf.text("Image Error", imgX + targetW / 2, imgY + targetH / 2, { align: "center" });
+                        }
+                    };
+
+                    drawRow("Reference (Master)", imgB, 0);
+                    drawRow("New Image", imgA, 1);
+                    drawRow("Difference", imgDiff, 2);
+                }
 
                 const progress = Math.round(((i + 1) / comparisons.length) * 100);
                 const progressText = document.getElementById('pdf-progress-text');
@@ -830,9 +980,9 @@ export default function Dashboard() {
                                     </button>
                                     <button
                                         type="button"
-                                        disabled={compZoom >= 2.5}
+                                        disabled={compZoom >= 3.0}
                                         onClick={() => {
-                                            setCompZoom(z => Math.min(2.5, Number((z + 0.25).toFixed(2))));
+                                            setCompZoom(z => Math.min(3.0, Number((z + 0.25).toFixed(2))));
                                         }}
                                         className="p-1 rounded text-slate-600 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                                         title="Zoom In (+)"
@@ -926,7 +1076,7 @@ export default function Dashboard() {
                                 if (!delta) return;
 
                                 const zoomStep = delta < 0 ? 0.25 : -0.25;
-                                const newZoom = Math.max(0.5, Math.min(2.5, Number((compZoom + zoomStep).toFixed(2))));
+                                const newZoom = Math.max(0.5, Math.min(3.0, Number((compZoom + zoomStep).toFixed(2))));
                                 if (newZoom === compZoom) return;
 
                                 if (newZoom <= 1) {
@@ -1011,7 +1161,7 @@ export default function Dashboard() {
                         aria-label="Close Preview"
                     />
                     <div className="flex justify-end p-4 gap-2 shrink-0 relative z-10 pointer-events-auto">
-                        <button className="text-white bg-black/50 hover:bg-white/20 p-2 rounded transition-colors" onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.min(2.5, Number((z + 0.25).toFixed(2)))); setPan({ x: 0, y: 0 }); }}>
+                        <button className="text-white bg-black/50 hover:bg-white/20 p-2 rounded transition-colors" onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.min(3.0, Number((z + 0.25).toFixed(2)))); setPan({ x: 0, y: 0 }); }}>
                             <ZoomIn size={24} />
                         </button>
                         <button className="text-white bg-black/50 hover:bg-white/20 p-2 rounded transition-colors" onClick={(e) => { e.stopPropagation(); setZoomLevel(z => Math.max(0.5, Number((z - 0.25).toFixed(2)))); setPan({ x: 0, y: 0 }); }}>
@@ -1048,7 +1198,7 @@ export default function Dashboard() {
                             e.preventDefault();
                             if (!e.deltaY) return;
                             const zoomStep = e.deltaY < 0 ? 0.25 : -0.25;
-                            const newZoom = Math.max(0.5, Math.min(2.5, Number((zoomLevel + zoomStep).toFixed(2))));
+                            const newZoom = Math.max(0.5, Math.min(3.0, Number((zoomLevel + zoomStep).toFixed(2))));
                             if (newZoom === zoomLevel) return;
 
                             if (newZoom <= 1) {
